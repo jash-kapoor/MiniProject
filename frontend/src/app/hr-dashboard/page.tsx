@@ -1,0 +1,304 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+
+import { BACKEND_URL } from "@/app/config";
+
+type Candidate = {
+  id: number;
+  full_name: string;
+  email: string;
+};
+
+type Evaluation = {
+  overall_score: number;
+};
+
+type Interview = {
+  id: number;
+  job_title: string;
+  status: string;
+  created_at: string;
+  candidate: Candidate;
+  evaluation?: Evaluation;
+};
+
+export default function HRDashboard() {
+  const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Live Session State
+  const [candidateName, setCandidateName] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const token = localStorage.getItem("voxassess_token");
+    if (!token) {
+      router.push("/login?auth=required");
+      return;
+    }
+  }, [router]);
+
+  const handleCreateSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!candidateName || !jobTitle) return;
+    
+    setIsCreatingSession(true);
+    try {
+      // 1. Create candidate (mocking this flow for now, normally you'd lookup/create)
+      // We'll use candidate ID 1 (Alice) as a fallback if not implementing full user creation
+      
+      // 2. Create the Interview record
+      const token = localStorage.getItem("voxassess_token");
+      const intRes = await fetch(`${BACKEND_URL}/interviews/`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        // For simplicity in this demo, assigning to current user context
+        body: JSON.stringify({ job_title: jobTitle, candidate_id: 1 })
+      });
+      
+      if (!intRes.ok) throw new Error("Failed to create interview");
+      const interviewData = await intRes.json();
+      
+      // 3. Generate the live session link
+      const liveRes = await fetch(`${BACKEND_URL}/live-sessions?interview_id=${interviewData.id}`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      
+      if (!liveRes.ok) throw new Error("Failed to generate live session");
+      const liveData = await liveRes.json();
+      
+      // Create the frontend link
+      const link = `${window.location.origin}/interview/live/${liveData.meetingId}`;
+      setMeetingLink(link);
+      
+    } catch (err) {
+      console.error("Session creation error:", err);
+      alert("Failed to create live session.");
+    } finally {
+      setIsCreatingSession(false);
+    }
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(meetingLink);
+    alert("Session link copied to clipboard!");
+  };
+
+  useEffect(() => {
+    async function fetchInterviews() {
+      const token = localStorage.getItem("voxassess_token");
+      try {
+        const res = await fetch(`${BACKEND_URL}/interviews/all`, {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setInterviews(data);
+        } else if (res.status === 401) {
+          router.push("/login?auth=expired");
+        }
+      } catch (error) {
+        console.error("Failed to fetch interviews:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchInterviews();
+  }, []);
+
+  const stats = [
+    { label: "Active Jobs", value: "8", color: "text-blue-400" },
+    { label: "Total Candidates", value: interviews.length.toString(), color: "text-purple-400" },
+    { label: "Pending Reviews", value: interviews.filter(i => i.status === 'pending').length.toString(), color: "text-amber-400" },
+    { label: "Avg. Match", value: "78%", color: "text-emerald-400" },
+  ];
+
+  return (
+    <main className="min-h-screen bg-[#0a0f1a] p-6 lg:p-10 text-gray-100">
+      <div className="max-w-6xl mx-auto space-y-10">
+        {/* Page Title & Actions */}
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-8">
+          <div>
+            <h1 className="text-4xl font-extrabold tracking-tight text-white mb-2">
+              HR <span className="text-indigo-500">Dashboard</span>
+            </h1>
+            <p className="text-gray-400">Manage candidate assessments and AI-driven insights.</p>
+          </div>
+          <div className="flex gap-3">
+            <a 
+              href={`${BACKEND_URL}/export-dataset?format=csv`}
+              download="voxassess_dataset.csv"
+              className="px-4 py-2 rounded-lg bg-emerald-600/10 border border-emerald-500/20 hover:bg-emerald-600/20 text-emerald-400 transition text-sm flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export Dataset (CSV)
+            </a>
+            <button className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition text-sm">Export Page Data</button>
+            <button className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition text-sm">Create Job Posting</button>
+          </div>
+        </header>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {stats.map((stat) => (
+            <div key={stat.label} className="p-6 rounded-2xl bg-[#111827] border border-[#1e293b]">
+              <p className="text-xs font-semibold uppercase tracking-wider mb-2 text-gray-500">{stat.label}</p>
+              <p className={`text-3xl font-bold ${stat.color}`}>{stat.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Live Interview Creator */}
+        <section className="bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-6 lg:p-8">
+          <div className="flex flex-col md:flex-row gap-8 items-start">
+            <div className="flex-1 space-y-2">
+              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                </span>
+                Generate Live Session
+              </h2>
+              <p className="text-indigo-200/70 text-sm">Create a secure, one-time link for a real-time AI-monitored interview.</p>
+            </div>
+            
+            <div className="flex-1 w-full bg-[#0a0f1a]/50 p-6 rounded-xl border border-white/5">
+              {!meetingLink ? (
+                <form onSubmit={handleCreateSession} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-gray-400">Candidate Name</label>
+                      <input 
+                        type="text" required
+                        value={candidateName} onChange={e => setCandidateName(e.target.value)}
+                        className="w-full bg-[#111827] border border-[#1e293b] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                        placeholder="e.g. Jane Doe"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-gray-400">Job Role</label>
+                      <input 
+                        type="text" required
+                        value={jobTitle} onChange={e => setJobTitle(e.target.value)}
+                        className="w-full bg-[#111827] border border-[#1e293b] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                        placeholder="e.g. Senior Developer"
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    type="submit" 
+                    disabled={isCreatingSession}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white font-medium rounded-lg transition"
+                  >
+                    {isCreatingSession ? "Generating..." : "Generate Link"}
+                  </button>
+                </form>
+              ) : (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-emerald-400 uppercase tracking-widest">Session Ready</label>
+                    <div className="flex items-center gap-2 bg-[#111827] border border-emerald-500/30 rounded-lg p-1 pl-4">
+                      <span className="text-sm font-mono text-gray-300 truncate w-full select-all">{meetingLink}</span>
+                      <button onClick={copyLink} className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-md transition flex-shrink-0">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={() => setMeetingLink("")} className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-white font-medium rounded-lg transition text-sm">
+                      Create Another
+                    </button>
+                    <Link href={meetingLink.replace(window.location.origin, '')} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg text-center transition text-sm group">
+                      Join as Host <span className="inline-block group-hover:translate-x-1 transition-transform">→</span>
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Candidate Table */}
+        <section>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-white">Recent Assessments</h2>
+            <div className="relative">
+              <input 
+                type="text" 
+                placeholder="Search candidates..." 
+                className="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500/50 w-64 text-white"
+              />
+            </div>
+          </div>
+          
+          <div className="overflow-hidden rounded-2xl border border-[#1e293b] bg-[#111827]">
+            {isLoading ? (
+              <div className="p-20 text-center text-gray-500">Loading assessments...</div>
+            ) : (
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-white/5 border-b border-[#1e293b]">
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-400">Candidate</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-400">Position</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-400">Date</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-400">Score</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-400">Status</th>
+                    <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-gray-400 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1e293b]">
+                  {interviews.map((interview) => (
+                    <tr key={interview.id} className="hover:bg-white/[0.02] transition-colors group">
+                      <td className="px-6 py-4 font-medium text-white">{interview.candidate.full_name}</td>
+                      <td className="px-6 py-4 text-gray-400 text-sm">{interview.job_title}</td>
+                      <td className="px-6 py-4 text-gray-400 text-sm">{new Date(interview.created_at).toLocaleDateString()}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 rounded-full bg-gray-700 overflow-hidden">
+                            <div className="h-full bg-indigo-500" style={{ width: `${interview.evaluation?.overall_score || 0}%` }} />
+                          </div>
+                          <span className="text-xs font-bold text-white">{interview.evaluation?.overall_score || 'N/A'}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                          interview.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+                          interview.status === 'flagged' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
+                          'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                        }`}>
+                          {interview.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <Link href={`/reports/${interview.id}`} className="text-indigo-400 hover:text-indigo-300 font-medium text-sm">Review Results</Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
