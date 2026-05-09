@@ -1,27 +1,49 @@
+import logging
 import os
+
 from fastapi import APIRouter, Depends, HTTPException
 import jwt
 import time
+
 from auth import get_current_user
 from models import User
+
+logger = logging.getLogger("voxassess.stream")
 
 router = APIRouter(
     prefix="/stream",
     tags=["stream"]
 )
 
-# Placeholders for Stream API config
-STREAM_API_KEY = os.getenv("STREAM_API_KEY", "placeholder_api_key")
-STREAM_API_SECRET = os.getenv("STREAM_API_SECRET", "placeholder_api_secret")
+# Stream API config — loaded from environment variables (no hardcoded placeholders)
+STREAM_API_KEY = os.environ.get("STREAM_API_KEY")
+STREAM_API_SECRET = os.environ.get("STREAM_API_SECRET")
+
+# Startup check: warn if env vars are missing
+if not STREAM_API_KEY:
+    logger.warning(
+        "⚠️  STREAM_API_KEY is not set. "
+        "Live video sessions will not work. "
+        "Set the STREAM_API_KEY environment variable or add it to your .env file."
+    )
+if not STREAM_API_SECRET:
+    logger.warning(
+        "⚠️  STREAM_API_SECRET is not set. "
+        "Live video sessions will not work. "
+        "Set the STREAM_API_SECRET environment variable or add it to your .env file."
+    )
 
 @router.get("/token")
 async def get_stream_token(current_user: User = Depends(get_current_user)):
     """
     Generate a Stream Video token for the authenticated user.
     """
-    if STREAM_API_SECRET == "placeholder_api_secret":
-        # In a real app, do not proceed or use a dummy token if testing
-        pass
+    if not STREAM_API_KEY or not STREAM_API_SECRET:
+        raise HTTPException(
+            status_code=503,
+            detail="Stream Video API keys are not configured. "
+                   "Set STREAM_API_KEY and STREAM_API_SECRET environment variables."
+        )
 
     user_id = str(current_user.id)
     

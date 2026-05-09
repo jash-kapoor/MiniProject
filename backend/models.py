@@ -49,3 +49,32 @@ class Evaluation(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     interview = relationship("Interview", back_populates="evaluation")
+
+
+class InterviewReport(Base):
+    """
+    Persists per-interview answer data, monitoring events, and violations
+    so that data survives server restarts during an in-progress interview.
+    """
+    __tablename__ = "interview_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    interview_id = Column(Integer, ForeignKey("interviews.id"), unique=True, index=True)
+    answers = Column(JSON, default=[])
+    monitoring = Column(JSON, default=[])
+    violations = Column(JSON, default=[])
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class LiveSession(Base):
+    """
+    Maps a unique meeting_id (UUID) to an interview_id for live sessions.
+    """
+    __tablename__ = "live_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(String, unique=True, index=True)
+    interview_id = Column(Integer, ForeignKey("interviews.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+

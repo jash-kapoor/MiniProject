@@ -18,7 +18,11 @@ STRONG_VOCABULARY = {
     "implemented", "developed", "optimized", "architected", "designed",
     "collaborated", "analyzed", "delivered", "managed", "led",
     "spearheaded", "streamlined", "engineered", "integrated", "deployed",
-    "scalable", "efficient", "robust", "innovative", "strategic"
+    "scalable", "efficient", "robust", "innovative", "strategic",
+    "pursuing", "coordinator", "engineering", "computer", "science",
+    "experience", "university", "graduate", "undergraduate", "degree",
+    "passionate", "skills", "team", "project", "research", "internship",
+    "academic", "professional", "responsible", "achieved"
 }
 
 # Simple sentiment words
@@ -79,8 +83,9 @@ def extract_speech_features(audio_path: str, transcript: str) -> dict:
         "duration_seconds": float(round(float(duration), 2)),
     }
 
-def compute_all_scores(audio_path):
-    features = extract_speech_features(audio_path)
+def compute_all_scores(audio_path: str, transcript: str):
+    features = extract_speech_features(audio_path, transcript)
+    features["transcript"] = transcript
     score = calculate_score(features)
     
     return {
@@ -120,11 +125,15 @@ def calculate_score(features: dict) -> dict:
     relevance_ratio = float(strong_word_count) / max(float(word_count), 1.0)
     content_relevance = float(min(20.0, float(relevance_ratio * 200)))
 
+    # Base score for genuine answers over 20 words
+    if word_count > 20:
+        content_relevance = max(8.0, content_relevance)
+
     # Bonus for longer, substantive answers
     if word_count >= 50:
-        content_relevance = min(20, content_relevance + 4)
+        content_relevance = min(20.0, content_relevance + 4.0)
     if word_count >= 100:
-        content_relevance = min(20, content_relevance + 3)
+        content_relevance = min(20.0, content_relevance + 3.0)
 
     # --- 2. Fluency (0-20) [Fairness Normalized] ---
     filler_ratio = filler_count / max(word_count, 1)

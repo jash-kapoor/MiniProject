@@ -1,8 +1,9 @@
 import sqlite3
 import os
 from datetime import datetime
+from pathlib import Path
 
-DB_PATH = "/Users/JashKapoor/Desktop/voxassess-ai/backend/voxassess_dev.db"
+DB_PATH = str(Path(__file__).parent / "voxassess_dev.db")
 
 def seed_db():
     conn = sqlite3.connect(DB_PATH)

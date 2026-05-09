@@ -41,6 +41,7 @@ export default function InterviewPage() {
   // ─── State ──────────────────────────────────
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
+  const isRecordingRef = useRef(false);
   const [transcript, setTranscript] = useState("");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -53,10 +54,10 @@ export default function InterviewPage() {
   const [interviewId, setInterviewId] = useState<number | null>(null);
 
   // Proctoring State
-  const [tabSwitchCount, setTabSwitchCount] = useState(0);
-  const tabSwitchCountRef = useRef(0);
-  const [cheatingCount, setCheatingCount] = useState(0);
-  const cheatingCountRef = useRef(0);
+  const [flagCount, setFlagCount] = useState(0);
+  const flagCountRef = useRef(0);
+  const [faceWarningVisible, setFaceWarningVisible] = useState(false);
+  const [faceDetectionPct, setFaceDetectionPct] = useState(100);
 
   // ─── Refs ───────────────────────────────────
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -66,6 +67,48 @@ export default function InterviewPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const monitoringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
+  const eyeContactLostSince = useRef<number | null>(null);
+  const faceNotDetectedSince = useRef<number | null>(null);
+  const totalFrames = useRef(0);
+  const faceDetectedFrames = useRef(0);
+
+  // ─── Proctoring Rules ──────────────────────
+  const terminateInterview = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+    window.location.href = "/practice";
+  }, []);
+
+  const raiseFlag = useCallback((reason: string) => {
+    if (!isRecordingRef.current) return;
+    flagCountRef.current += 1;
+    const currentFlags = flagCountRef.current;
+    setFlagCount(currentFlags);
+    
+    toast.error(`⚠️ Flag ${currentFlags}/6: ${reason}`, { id: 'proctor-alert', duration: 4000 });
+    
+    if (interviewId) {
+      const token = localStorage.getItem("voxassess_token");
+      fetch(`${BACKEND_URL}/log-violation/${interviewId}`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          violation_type: "proctoring_flag",
+          message: reason
+        })
+      }).catch(() => {});
+    }
+
+    if (currentFlags >= 6) {
+      toast.error("Interview terminated: Maximum violations exceeded.", { id: 'proctor-terminate', duration: 5000 });
+      setTimeout(terminateInterview, 4000);
+    }
+  }, [interviewId, terminateInterview]);
 
   // ─── Initialization ────────────────────────
   useEffect(() => {
@@ -150,6 +193,7 @@ export default function InterviewPage() {
     recorder.start(250);
     mediaRecorderRef.current = recorder;
     setIsRecording(true);
+    isRecordingRef.current = true;
     setRecordingTime(0);
 
     timerRef.current = setInterval(() => {
@@ -157,11 +201,14 @@ export default function InterviewPage() {
     }, 1000);
 
     // Start background monitoring every 3 seconds
-    startMonitoring();
+    if (!monitoringIntervalRef.current) {
+      startMonitoring();
+    }
   };
 
 const startMonitoring = () => {
   monitoringIntervalRef.current = setInterval(async () => {
+    if (!isRecordingRef.current) return;
     if (!videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
@@ -198,7 +245,7 @@ const startMonitoring = () => {
         formData.append("interview_id", interviewId.toString());
       }
             const token = localStorage.getItem("voxassess_token");
-          const res = await fetch(`${BACKEND_URL}/detect`, {
+          const res = await fetch(`${BACKEND_URL}/monitor-frame`, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${token}`
@@ -219,7 +266,44 @@ const startMonitoring = () => {
       }
 
       const data = await res.json();
-      console.log("YOLO RESULT:", data);
+      console.log("MONITOR RESULT:", data);
+
+      // Face tracking
+      totalFrames.current += 1;
+      const faceDetected = data.face?.face_detected;
+      if (faceDetected) {
+        faceDetectedFrames.current += 1;
+        faceNotDetectedSince.current = null;
+        setFaceWarningVisible(false);
+      } else {
+        if (!faceNotDetectedSince.current) {
+          faceNotDetectedSince.current = Date.now();
+        }
+        setFaceWarningVisible(true);
+        if (isRecordingRef.current && Date.now() - faceNotDetectedSince.current > 30000) { // 30 seconds
+          toast.error("Interview terminated: Face not detected for 30 seconds.", { id: 'proctor-terminate', duration: 5000 });
+          setTimeout(terminateInterview, 4000);
+          return;
+        }
+      }
+      setFaceDetectionPct(Math.round((faceDetectedFrames.current / totalFrames.current) * 100));
+
+      // Eye Contact Tracking
+      const eyeContact = data.eye_contact?.eye_contact;
+      const gazeDirection = data.eye_contact?.gaze_direction;
+      if (!eyeContact && gazeDirection !== "no_face") {
+        if (!eyeContactLostSince.current) {
+          eyeContactLostSince.current = Date.now();
+        }
+        if (Date.now() - eyeContactLostSince.current > 3000) { // 3 seconds
+           if (isRecordingRef.current) {
+             raiseFlag("Eye contact lost for 3 seconds");
+           }
+           eyeContactLostSince.current = null; // Reset to allow another flag later
+        }
+      } else {
+         eyeContactLostSince.current = null;
+      }
 
       if (data.is_suspicious) {
         setIsSuspicious(true);
@@ -233,43 +317,8 @@ const startMonitoring = () => {
 
         setAlerts(mappedAlerts);
 
-        if (data.alerts.length > 0) {
-          const msg = `⚠️ ${data.alerts.join(", ")}`;
-          toast.error(msg, { id: 'proctor-alert', duration: 4000 });
-        }
-
-        // 🚨 Cheating logic
-        const alertsStr = JSON.stringify(data.alerts).toLowerCase();
-        if (
-          alertsStr.includes("phone") ||
-          alertsStr.includes("multiple people") ||
-          alertsStr.includes("multiple persons")
-        ) {
-          cheatingCountRef.current += 1;
-          const next = cheatingCountRef.current;
-          setCheatingCount(next);
-
-          if (next >= 2) {
-            toast.error("Interview terminated: Multiple cheating violations detected.", { id: 'proctor-alert', duration: 4000 });
-            setTimeout(() => {
-              window.location.href = "/practice";
-            }, 4000);
-          }
-
-          if (interviewId) {
-            const token = localStorage.getItem("voxassess_token");
-            fetch(`${BACKEND_URL}/log-violation/${interviewId}`, {
-              method: "POST",
-              headers: { 
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-              },
-              body: JSON.stringify({
-                violation_type: "cheating_detected",
-                message: `AI detected suspicious activity: ${data.alerts.join(", ")}`
-              })
-            }).catch(() => {});
-          }
+        if (isRecordingRef.current && data.alerts.length > 0) {
+          raiseFlag(`Suspicious activity: ${data.alerts.join(", ")}`);
         }
       } else {
         // Clear suspicious state and alerts if current frame is fine
@@ -287,61 +336,23 @@ const startMonitoring = () => {
       mediaRecorderRef.current.stop();
     }
     setIsRecording(false);
+    isRecordingRef.current = false;
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    if (monitoringIntervalRef.current) {
-      clearInterval(monitoringIntervalRef.current);
-      monitoringIntervalRef.current = null;
-    }
+    // Do not clear monitoring interval so visual feed continues
   };
-
-  // ─── Proctoring Rules ──────────────────────
-  const terminateInterview = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-    }
-    window.location.href = "/practice";
-  }, []);
-
-  const handleViolationCheck = useCallback((tabs: number) => {
-     if (tabs >= 2) {
-       toast.error("Interview terminated: Maximum tab switches exceeded.", { id: 'proctor-alert', duration: 4000 });
-       setTimeout(terminateInterview, 3000);
-     } else if (tabs === 1) {
-       toast.error("Warning: Please do not switch tabs during the interview.", { id: 'proctor-alert', duration: 4000 });
-     }
-  }, [terminateInterview]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        tabSwitchCountRef.current += 1;
-        const next = tabSwitchCountRef.current;
-        setTabSwitchCount(next);
-        handleViolationCheck(next);
-        
-        // Log to backend
-        if (interviewId) {
-          const token = localStorage.getItem("voxassess_token");
-          fetch(`${BACKEND_URL}/log-violation/${interviewId}`, {
-            method: "POST",
-            headers: { 
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              violation_type: "tab_switch",
-              message: `Candidate switched tabs. Count: ${next}`
-            })
-          }).catch(() => {});
-        }
+      if (document.hidden && isRecordingRef.current) {
+        raiseFlag("Candidate switched tabs");
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [handleViolationCheck]);
+  }, [raiseFlag]);
 
   // ─── Transcription & Analysis ───────────────
   const handleRecordingComplete = async () => {
@@ -572,6 +583,21 @@ const startMonitoring = () => {
                   SUSPICIOUS ACTIVITY
                 </div>
               )}
+
+              {/* Face Not Detected Warning */}
+              {faceWarningVisible && (
+                <div className="absolute inset-0 bg-red-900/60 flex flex-col items-center justify-center z-10 backdrop-blur-sm">
+                  <div className="bg-black/80 px-6 py-4 rounded-2xl flex flex-col items-center gap-3 animate-pulse border border-red-500/50">
+                    <svg className="w-10 h-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <p className="text-white text-lg font-bold text-center">Face Not Detected</p>
+                    <p className="text-red-300 text-sm font-semibold max-w-xs text-center leading-snug">
+                      Please position your face in the center of the camera. The interview will terminate automatically in 30 seconds.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Hidden canvas for frame capture */}
@@ -618,6 +644,59 @@ const startMonitoring = () => {
 
         {/* ──── Right: Score & Feedback ──── */}
         <div className="space-y-6">
+          {/* Proctoring Status Panel */}
+          <div className="rounded-2xl bg-[#111827] border border-[#1e293b] p-6 lg:mb-6">
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#94a3b8] mb-4">
+              Proctoring Status
+            </p>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-300 font-medium">Flags</span>
+                  <span className={`font-mono font-bold ${flagCount >= 4 ? 'text-red-400' : flagCount >= 2 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                    {flagCount} / 6
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-gray-700/60 overflow-hidden">
+                   <div 
+                     className={`h-full rounded-full transition-all duration-300 ${flagCount >= 4 ? 'bg-red-500' : flagCount >= 2 ? 'bg-amber-400' : 'bg-emerald-500'}`} 
+                     style={{ width: `${Math.min(100, (flagCount / 6) * 100)}%` }}
+                   />
+                </div>
+              </div>
+              
+              <div className="flex justify-between items-center bg-white/[0.02] p-3 border border-white/5 rounded-xl">
+                <span className="text-sm text-gray-400">Face Detection Rate</span>
+                <span className={`font-bold text-sm ${faceDetectionPct >= 70 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {faceDetectionPct}%
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                 <div className="bg-white/[0.02] p-3 border border-white/5 rounded-xl flex flex-col gap-1 items-center justify-center">
+                    <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider text-center">Eye Contact</span>
+                    {eyeContactLostSince.current ? (
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-amber-500 animate-pulse">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Lost
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-500">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Looking
+                      </span>
+                    )}
+                 </div>
+                 <div className="bg-white/[0.02] p-3 border border-white/5 rounded-xl flex flex-col gap-1 items-center justify-center">
+                    <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider text-center">Suspicious</span>
+                    {isSuspicious ? (
+                       <span className="text-xs font-bold text-red-500">Yes</span>
+                    ) : (
+                       <span className="text-xs font-bold text-emerald-500">No</span>
+                    )}
+                 </div>
+              </div>
+            </div>
+          </div>
+
           {/* Overall score */}
           <div className="rounded-2xl bg-[#111827] border border-[#1e293b] p-6 text-center">
             <p className="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-4">

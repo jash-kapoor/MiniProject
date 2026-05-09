@@ -1,31 +1,47 @@
-import os
-import io
-import cv2
-import numpy as np
 import base64
-import time
-from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, BackgroundTasks, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from datetime import datetime
 import csv
 import io
-
 import os
+import shutil
 import sys
+import time
+import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import cv2
+import numpy as np
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 # Add current directory to path for local imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import database
 import models
-from routers import users, interviews, stream
-from whisper_model import transcribe_audio
-from scoring import extract_speech_features, calculate_score
-from monitoring import analyze_frame
 from auth import get_current_user
+from monitoring import analyze_frame
+from routers import interviews, stream, users
+from scoring import (
+    analyze_sentiment,
+    calculate_rolling_confidence,
+    calculate_score,
+    extract_speech_features,
+)
+from whisper_model import transcribe_audio
 
 # Create database tables
 models.Base.metadata.create_all(bind=database.engine)
@@ -38,14 +54,14 @@ app.include_router(interviews.router)
 app.include_router(stream.router)
 
 # Configure CORS
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -57,8 +73,27 @@ RECORDINGS_DIR = os.path.join(os.path.dirname(__file__), "recordings")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
-# In-memory store for interview reports (per session)
-interview_reports: dict = {}
+
+# ─────────────────────────────────────────────────────────
+#  Helper: Get or create an InterviewReport row in the DB
+# ─────────────────────────────────────────────────────────
+def _get_or_create_report(db: Session, interview_id: int) -> models.InterviewReport:
+    report = (
+        db.query(models.InterviewReport)
+        .filter(models.InterviewReport.interview_id == interview_id)
+        .first()
+    )
+    if not report:
+        report = models.InterviewReport(
+            interview_id=interview_id,
+            answers=[],
+            monitoring=[],
+            violations=[],
+        )
+        db.add(report)
+        db.commit()
+        db.refresh(report)
+    return report
 
 
 @app.get("/")
@@ -71,33 +106,52 @@ def health_check():
     return {"status": "healthy", "database": "configured"}
 
 
-# In-memory store for live session mapping
-live_sessions: dict = {}
-
+# ─────────────────────────────────────────────────────────
+#  Live Sessions — SQLite-backed
+# ─────────────────────────────────────────────────────────
 @app.post("/live-sessions")
-def create_live_session(interview_id: int):
-    import uuid
+def create_live_session(
+    interview_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     meeting_id = str(uuid.uuid4())
-    live_sessions[meeting_id] = interview_id
+    live_session = models.LiveSession(
+        meeting_id=meeting_id,
+        interview_id=interview_id,
+    )
+    db.add(live_session)
+    db.commit()
     return {"meetingId": meeting_id, "interview_id": interview_id}
 
+
 @app.get("/live-sessions/{meeting_id}")
-def get_live_session(meeting_id: str):
-    if meeting_id not in live_sessions:
+def get_live_session(
+    meeting_id: str,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    session = (
+        db.query(models.LiveSession)
+        .filter(models.LiveSession.meeting_id == meeting_id)
+        .first()
+    )
+    if not session:
         raise HTTPException(status_code=404, detail="Session not found or expired")
-    return {"interview_id": live_sessions[meeting_id]}
+    return {"interview_id": session.interview_id}
 
-from pydantic import BaseModel
-# from typing import Any # Already imported above
 
+# ─────────────────────────────────────────────────────────
+#  WebRTC Signaling (ephemeral, in-memory is acceptable)
+# ─────────────────────────────────────────────────────────
 class SDPPayload(BaseModel):
     meetingId: str
     sdp: Any
 
-# In-memory storage for signaling and alerts
 offers: dict = {}
 answers: dict = {}
 meeting_alerts: dict = {}
+
 
 class ConnectionManager:
     def __init__(self):
@@ -120,6 +174,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+
 @app.websocket("/ws/meeting/{meeting_id}")
 async def websocket_endpoint(websocket: WebSocket, meeting_id: str):
     await manager.connect(meeting_id, websocket)
@@ -133,6 +188,7 @@ async def websocket_endpoint(websocket: WebSocket, meeting_id: str):
     except Exception:
         manager.disconnect(meeting_id, websocket)
 
+
 class AlertPayload(BaseModel):
     meetingId: str
     isSuspicious: bool
@@ -140,46 +196,73 @@ class AlertPayload(BaseModel):
 
 
 @app.post("/offer")
-def post_offer(payload: SDPPayload):
+def post_offer(
+    payload: SDPPayload,
+    current_user: models.User = Depends(get_current_user),
+):
     offers[payload.meetingId] = payload.sdp
     return {"status": "success"}
 
+
 @app.get("/offer/{meeting_id}")
-def get_offer(meeting_id: str):
+def get_offer(
+    meeting_id: str,
+    current_user: models.User = Depends(get_current_user),
+):
     if meeting_id in offers:
         return {"sdp": offers[meeting_id]}
     return {"sdp": None}
 
+
 @app.post("/answer")
-def post_answer(payload: SDPPayload):
+def post_answer(
+    payload: SDPPayload,
+    current_user: models.User = Depends(get_current_user),
+):
     answers[payload.meetingId] = payload.sdp
     return {"status": "success"}
 
+
 @app.get("/answer/{meeting_id}")
-def get_answer(meeting_id: str):
+def get_answer(
+    meeting_id: str,
+    current_user: models.User = Depends(get_current_user),
+):
     if meeting_id in answers:
         return {"sdp": answers[meeting_id]}
     return {"sdp": None}
 
+
 @app.post("/meeting-alerts")
-def post_meeting_alerts(payload: AlertPayload):
+def post_meeting_alerts(
+    payload: AlertPayload,
+    current_user: models.User = Depends(get_current_user),
+):
     meeting_alerts[payload.meetingId] = {
         "is_suspicious": payload.isSuspicious,
         "alerts": payload.alerts
     }
     return {"status": "success"}
 
+
 @app.get("/meeting-alerts/{meeting_id}")
-def get_meeting_alerts(meeting_id: str):
+def get_meeting_alerts(
+    meeting_id: str,
+    current_user: models.User = Depends(get_current_user),
+):
     if meeting_id in meeting_alerts:
         return meeting_alerts[meeting_id]
     return {"is_suspicious": False, "alerts": []}
+
 
 # ─────────────────────────────────────────────────────────
 #  1. POST /transcribe — Whisper transcription
 # ─────────────────────────────────────────────────────────
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
+async def transcribe(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user),
+):
     """
     Accepts an audio file and returns the transcribed text.
     """
@@ -192,7 +275,6 @@ async def transcribe(file: UploadFile = File(...)):
         transcript = transcribe_audio(file_path)
         
         # Real-time analytics for Live Room
-        from scoring import analyze_sentiment, calculate_rolling_confidence, extract_speech_features
         sentiment = analyze_sentiment(transcript)
         features = extract_speech_features(file_path, transcript)
         confidence_rolling = calculate_rolling_confidence(features)
@@ -218,6 +300,7 @@ async def analyze_answer(
     file: UploadFile = File(...),
     interview_id: Optional[int] = None,
     db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     """
     Accepts an audio file, transcribes it, extracts speech features,
@@ -243,9 +326,6 @@ async def analyze_answer(
         timestamp = int(time.time())
         safe_name = f"{timestamp}_{interview_id or 'anon'}_{file.filename}"
         permanent_path = os.path.join(RECORDINGS_DIR, safe_name)
-        
-        # Use shutil to move the file
-        import shutil
         shutil.move(file_path, permanent_path)
 
         result = {
@@ -259,13 +339,12 @@ async def analyze_answer(
         if interview_id:
             db_interview = db.query(models.Interview).filter(models.Interview.id == interview_id).first()
             if db_interview:
-                # Add to a temporary list or update a running aggregate
-                # For now, let's keep the interview_reports dict for detailed per-answer tracking
-                # but update the interview status to 'evaluating'
-                s_id = str(interview_id)
-                if s_id not in interview_reports:
-                    interview_reports[s_id] = {"answers": [], "monitoring": []}
-                interview_reports[s_id]["answers"].append(result)
+                report = _get_or_create_report(db, interview_id)
+                current_answers = list(report.answers or [])
+                current_answers.append(result)
+                report.answers = current_answers
+                report.updated_at = datetime.utcnow()
+                db.commit()
                 
                 db_interview.status = "evaluating"
                 db.commit()
@@ -279,18 +358,25 @@ async def analyze_answer(
 
 
 @app.post("/finalize-interview/{interview_id}")
-async def finalize_interview(interview_id: int, db: Session = Depends(database.get_db)):
+async def finalize_interview(
+    interview_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """
     Calculates final scores from all answers and saves to the database.
     """
-    s_id = str(interview_id)
-    if s_id not in interview_reports:
+    report = (
+        db.query(models.InterviewReport)
+        .filter(models.InterviewReport.interview_id == interview_id)
+        .first()
+    )
+    if not report:
         raise HTTPException(status_code=404, detail="No interview data found for this session")
 
-    report = interview_reports[s_id]
-    answers = report.get("answers", [])
+    answers_list = report.answers or []
     
-    if not answers:
+    if not answers_list:
         raise HTTPException(status_code=400, detail="No answers recorded for this interview")
 
     # Calculate average scores
@@ -300,7 +386,7 @@ async def finalize_interview(interview_id: int, db: Session = Depends(database.g
         "structure", "fairness_score", "fairness_adjustment", "overall_score"
     ]
     for key in score_keys:
-        values = [a["scores"][key] for a in answers if key in a.get("scores", {})]
+        values = [a["scores"][key] for a in answers_list if key in a.get("scores", {})]
         avg_scores[key] = sum(values) / len(values) if values else 0
 
     # Save to Database
@@ -308,16 +394,16 @@ async def finalize_interview(interview_id: int, db: Session = Depends(database.g
         interview_id=interview_id,
         speech_score=avg_scores.get("fluency", 0),
         nlp_score=avg_scores.get("content_relevance", 0),
-        vision_score=avg_scores.get("confidence", 0), # Simplified mapping
+        vision_score=avg_scores.get("confidence", 0),  # Simplified mapping
         fairness_score=avg_scores.get("fairness_score", 0),
         fairness_adjustment=avg_scores.get("fairness_adjustment", 0),
         overall_score=avg_scores.get("overall_score", 0),
         detailed_feedback={
             "summary": "Interview completed successfully",
             "metrics": avg_scores,
-            "answers": answers,
-            "monitoring": report.get("monitoring", []),
-            "violations": report.get("violations", [])
+            "answers": answers_list,
+            "monitoring": report.monitoring or [],
+            "violations": report.violations or [],
         }
     )
     
@@ -329,14 +415,18 @@ async def finalize_interview(interview_id: int, db: Session = Depends(database.g
     
     db.commit()
     
-    # Cleanup in-memory store
-    interview_reports.pop(s_id, None)
+    # Cleanup: delete the report row now that it's been finalized
+    db.delete(report)
+    db.commit()
     
     return {"message": "Interview finalized and saved", "evaluation_id": db_evaluation.id}
 
 
 @app.post("/detect")
-async def detect(file: UploadFile = File(...), current_user: models.User = Depends(get_current_user)):
+async def detect(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user),
+):
     """
     Dedicated endpoint for real-time YOLO detection.
     """
@@ -376,7 +466,8 @@ async def detect(file: UploadFile = File(...), current_user: models.User = Depen
 async def monitor_frame(
     file: UploadFile = File(None),
     interview_id: Optional[int] = None,
-    current_user: models.User = Depends(get_current_user)
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
     """
     Accepts a video frame (image file or base64-encoded in body)
@@ -395,21 +486,19 @@ async def monitor_frame(
 
         # Store in report if interview_id provided
         if result["is_suspicious"] or result["person_count"] != 1:
-            s_id = str(interview_id) if interview_id else "unknown"
-            if s_id not in interview_reports:
-                interview_reports[s_id] = {"answers": [], "monitoring": []}
-            # Store summary only (not full frame data)
-            interview_reports[s_id]["monitoring"].append({
-                "face_detected": bool(result["face"]["detected"]), # Ensure boolean type
-                "eye_contact": bool(result["eye_contact"]["detected"]), # Ensure boolean type
-                "person_count": int(result["person_count"]), # Ensure integer type
-                "alerts": result["alerts"],
-                "is_suspicious": bool(result["is_suspicious"]), # Ensure boolean type
-            })
-            
-            # Broadcast alert in real-time if meeting context is known
-            # (Note: monitoring currently uses interview_id, we'd need meeting_id for WS broadcast)
-            # For now, we rely on the client sending meeting-alerts via REST which we'll upgrade later
+            if interview_id:
+                report = _get_or_create_report(db, interview_id)
+                current_monitoring = list(report.monitoring or [])
+                current_monitoring.append({
+                    "face_detected": bool(result["face"]["detected"]),
+                    "eye_contact": bool(result["eye_contact"]["detected"]),
+                    "person_count": int(result["person_count"]),
+                    "alerts": result["alerts"],
+                    "is_suspicious": bool(result["is_suspicious"]),
+                })
+                report.monitoring = current_monitoring
+                report.updated_at = datetime.utcnow()
+                db.commit()
         
         return result
     except HTTPException:
@@ -427,23 +516,21 @@ async def log_violation(
     interview_id: int,
     violation: ViolationLog,
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
     """
-    Logs a proctoring violation (e.g., tab switch) to the in-memory store.
+    Logs a proctoring violation (e.g., tab switch) to the database.
     """
-    s_id = str(interview_id)
-    if s_id not in interview_reports:
-        interview_reports[s_id] = {"answers": [], "monitoring": [], "violations": []}
-    
-    if "violations" not in interview_reports[s_id]:
-        interview_reports[s_id]["violations"] = []
-        
-    interview_reports[s_id]["violations"].append({
+    report = _get_or_create_report(db, interview_id)
+    current_violations = list(report.violations or [])
+    current_violations.append({
         "timestamp": datetime.utcnow().isoformat(),
         "type": violation.violation_type,
         "message": violation.message,
     })
+    report.violations = current_violations
+    report.updated_at = datetime.utcnow()
+    db.commit()
     
     return {"status": "ok"}
 
@@ -452,18 +539,25 @@ async def log_violation(
 #  4. GET /interview-report — Aggregated report
 # ─────────────────────────────────────────────────────────
 @app.get("/interview-report")
-def get_interview_report(interview_id: str, current_user: models.User = Depends(get_current_user)):
+def get_interview_report(
+    interview_id: str,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """
     Returns an aggregated interview report for the given interview_id,
     including all answer scores and monitoring alerts.
     """
-    if interview_id not in interview_reports:
+    report = (
+        db.query(models.InterviewReport)
+        .filter(models.InterviewReport.interview_id == int(interview_id))
+        .first()
+    )
+    if not report:
         raise HTTPException(status_code=404, detail="Interview report not found")
 
-    report = interview_reports[interview_id]
-
     # Aggregate answer scores
-    answer_data = report.get("answers", [])
+    answer_data = report.answers or []
     if answer_data:
         avg_scores = {}
         score_keys = ["content_relevance", "fluency", "vocabulary", "confidence", "structure", "overall_score"]
@@ -474,7 +568,7 @@ def get_interview_report(interview_id: str, current_user: models.User = Depends(
         avg_scores = {}
 
     # Aggregate monitoring data
-    monitoring_data = report.get("monitoring", [])
+    monitoring_data = report.monitoring or []
     total_frames = len(monitoring_data)
     suspicious_frames = sum(1 for m in monitoring_data if m.get("is_suspicious"))
     all_alerts = []
@@ -508,8 +602,14 @@ def get_interview_report(interview_id: str, current_user: models.User = Depends(
             "unique_alerts": list(unique_alert_types.values()),
         },
     }
+
+
 @app.get("/export-dataset")
-def export_dataset(format: str = "json", db: Session = Depends(database.get_db)):
+def export_dataset(
+    format: str = "json",
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """
     Exports all interview evaluation data as CSV or JSON.
     """
@@ -559,10 +659,6 @@ def export_dataset(format: str = "json", db: Session = Depends(database.get_db))
                 data.append(row)
 
     if format.lower() == "csv":
-        import csv
-        import io
-        from fastapi.responses import StreamingResponse
-        
         output = io.StringIO()
         if not data:
             return {"message": "No data to export"}

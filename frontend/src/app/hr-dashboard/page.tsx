@@ -28,6 +28,7 @@ type Interview = {
 export default function HRDashboard() {
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Live Session State
   const [candidateName, setCandidateName] = useState("");
@@ -120,11 +121,17 @@ export default function HRDashboard() {
     fetchInterviews();
   }, []);
 
+  const activeJobsCount = new Set(interviews.map(i => i.job_title)).size;
+  const interviewsWithScores = interviews.filter(i => i.evaluation?.overall_score !== undefined);
+  const avgMatch = interviewsWithScores.length > 0 
+    ? Math.round(interviewsWithScores.reduce((sum, i) => sum + (i.evaluation?.overall_score || 0), 0) / interviewsWithScores.length)
+    : 0;
+
   const stats = [
-    { label: "Active Jobs", value: "8", color: "text-blue-400" },
+    { label: "Active Jobs", value: activeJobsCount.toString(), color: "text-blue-400" },
     { label: "Total Candidates", value: interviews.length.toString(), color: "text-purple-400" },
     { label: "Pending Reviews", value: interviews.filter(i => i.status === 'pending').length.toString(), color: "text-amber-400" },
-    { label: "Avg. Match", value: "78%", color: "text-emerald-400" },
+    { label: "Avg. Match", value: `${avgMatch}%`, color: "text-emerald-400" },
   ];
 
   return (
@@ -149,8 +156,7 @@ export default function HRDashboard() {
               </svg>
               Export Dataset (CSV)
             </a>
-            <button className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition text-sm">Export Page Data</button>
-            <button className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition text-sm">Create Job Posting</button>
+            <button onClick={() => { window.location.href = `${BACKEND_URL}/export-dataset?format=csv`; }} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition text-sm">Export Page Data</button>
           </div>
         </header>
 
@@ -243,6 +249,8 @@ export default function HRDashboard() {
             <div className="relative">
               <input 
                 type="text" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search candidates..." 
                 className="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500/50 w-64 text-white"
               />
@@ -265,7 +273,12 @@ export default function HRDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1e293b]">
-                  {interviews.map((interview) => (
+                  {interviews
+                    .filter((interview) => 
+                      interview.candidate.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                      interview.job_title.toLowerCase().includes(searchQuery.toLowerCase())
+                    )
+                    .map((interview) => (
                     <tr key={interview.id} className="hover:bg-white/[0.02] transition-colors group">
                       <td className="px-6 py-4 font-medium text-white">{interview.candidate.full_name}</td>
                       <td className="px-6 py-4 text-gray-400 text-sm">{interview.job_title}</td>

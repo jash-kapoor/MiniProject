@@ -157,13 +157,13 @@ export default function LiveMeetingPage() {
             {error && <p className="text-red-400 mb-4">{error}</p>}
             <div className="flex flex-col w-full gap-3">
             <button
-                onClick={() => setRole("hr", setHasJoined(true))}
+                onClick={() => { setRole("hr"); setHasJoined(true); }}
                 className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl transition"
             >
                 Start as HR / Admin
             </button>
             <button
-                onClick={() => setRole("candidate", setHasJoined(true))}
+                onClick={() => { setRole("candidate"); setHasJoined(true); }}
                 className="w-full py-3 px-4 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-xl transition border border-gray-700"
             >
                 Join as Candidate

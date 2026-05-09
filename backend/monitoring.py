@@ -237,7 +237,7 @@ def detect_objects(frame: np.ndarray, face_boxes: list = []) -> dict:
 
             print("DETECTED:", label, conf)
 
-            if label == "cell phone" and conf > 0.5:
+            if label == "cell phone" and conf > 0.75:
                 alerts.append("Phone detected")
 
             # 4. ALSO detect multiple persons
@@ -267,32 +267,60 @@ def analyze_frame(frame: np.ndarray, interview_id: Optional[str] = None) -> dict
     """
     Analyzes frame for objects (YOLO) and eye contact (MediaPipe).
     """
+    face_result = detect_face(frame)
     object_result = detect_objects(frame)
-    
     eye_contact_result = detect_eye_contact(frame)
     current_time = time.time()
     
-    alerts = object_result["alerts"].copy()
-    is_suspicious = object_result["is_suspicious"]
+    # Start with non-phone alerts
+    alerts = [a for a in object_result["alerts"] if "Phone" not in a]
+    is_suspicious = object_result["person_count"] > 1 or not face_result.get("face_detected", False)
 
-    # Eye contact tracking
+    phone_detected = object_result.get("raw_phone_detected", False)
+    
+    # Fallback heuristic if YOLO didn't find a phone
+    if not phone_detected:
+        suspicious_rects = detect_heuristics(frame, face_result.get("faces", []))
+        if len(suspicious_rects) > 0:
+            phone_detected = True
+
     if interview_id:
-        if str(interview_id) not in eye_contact_tracker:
-            eye_contact_tracker[str(interview_id)] = {"last_lookaway_time": None, "is_alerting": False}
+        s_id = str(interview_id)
+        
+        # Phone confirmation buffer
+        if s_id not in phone_confirmation_buffer:
+            phone_confirmation_buffer[s_id] = []
             
-        tracker = eye_contact_tracker[str(interview_id)]
+        buffer = phone_confirmation_buffer[s_id]
+        buffer.append(phone_detected)
+        if len(buffer) > 3:
+            buffer.pop(0)
+            
+        if sum(buffer) >= 2:
+            alerts.append("Phone detected")
+            is_suspicious = True
+
+        # Eye contact tracking
+        if s_id not in eye_contact_tracker:
+            eye_contact_tracker[s_id] = {"last_lookaway_time": None, "is_alerting": False}
+            
+        tracker = eye_contact_tracker[s_id]
         
         if not eye_contact_result["eye_contact"] and eye_contact_result["gaze_direction"] != "no_face":
             if tracker["last_lookaway_time"] is None:
                 tracker["last_lookaway_time"] = current_time
-            elif current_time - tracker["last_lookaway_time"] > 4.0:
+            elif current_time - tracker["last_lookaway_time"] > 3.0:
                 tracker["is_alerting"] = True
                 alerts.append("Please maintain eye contact with the camera.")
-                is_suspicious = True
         else:
             # Looking back at the camera
             tracker["last_lookaway_time"] = None
             tracker["is_alerting"] = False
+    else:
+        # Without interview_id, alert immediately
+        if phone_detected:
+            alerts.append("Phone detected")
+            is_suspicious = True
 
     return {
         "is_suspicious": is_suspicious,
@@ -300,5 +328,5 @@ def analyze_frame(frame: np.ndarray, interview_id: Optional[str] = None) -> dict
         "objects": object_result["objects"],
         "person_count": object_result["person_count"],
         "eye_contact": eye_contact_result,
-        "face": detect_face(frame)
+        "face": face_result
     }

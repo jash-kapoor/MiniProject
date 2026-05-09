@@ -60,6 +60,13 @@ export default function ReportPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null); // Added error state
   const [activeTab, setActiveTab] = useState<"summary" | "answers" | "monitoring">("summary");
+  const [showToast, setShowToast] = useState(false);
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("voxassess_token");
@@ -139,6 +146,13 @@ export default function ReportPage() {
 
   return (
     <main className="min-h-screen bg-[#0a0f1a] text-gray-100 p-6 lg:p-10">
+      {/* Simple Toast */}
+      {showToast && (
+        <div className="fixed bottom-6 right-6 bg-emerald-500 text-white px-6 py-3 rounded-xl shadow-2xl font-semibold animate-in fade-in slide-in-from-bottom-4 z-50">
+          Link copied to clipboard!
+        </div>
+      )}
+
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-white/5 pb-8">
@@ -161,18 +175,18 @@ export default function ReportPage() {
             </p>
           </div>
           
-          <div className="flex items-center gap-4">
-            <button className="px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition text-sm font-semibold">
+          <div className="flex items-center gap-4 print:hidden">
+            <button onClick={() => window.print()} className="px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition text-sm font-semibold">
               Download PDF
             </button>
-            <button className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition text-sm shadow-xl shadow-indigo-600/20">
+            <button onClick={handleShare} className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition text-sm shadow-xl shadow-indigo-600/20">
               Share Report
             </button>
           </div>
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex gap-1 p-1 bg-white/5 rounded-xl mb-8 w-fit">
+        <div className="flex gap-1 p-1 bg-white/5 rounded-xl mb-8 w-fit print:hidden">
           {(["summary", "answers", "monitoring"] as const).map((tab) => (
             <button
               key={tab}
