@@ -61,11 +61,18 @@ def detect_face(frame: np.ndarray) -> dict:
     """
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60)
+        gray, scaleFactor=1.1, minNeighbors=3, minSize=(40, 40)
     )
 
     face_count = len(faces)
     face_boxes = [{"x": int(x), "y": int(y), "w": int(w), "h": int(h)} for (x, y, w, h) in faces]
+
+    if face_count == 0 and face_mesh is not None:
+        image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = face_mesh.process(image_rgb)
+        if results.multi_face_landmarks:
+            face_count = 1
+            face_boxes = [{"x": 0, "y": 0, "w": 0, "h": 0}]
 
     return {
         "face_detected": face_count > 0,
@@ -158,61 +165,6 @@ def detect_eye_contact(frame: np.ndarray) -> dict:
     }
 
 
-def detect_heuristics(frame: np.ndarray, face_boxes: list) -> list:
-    """
-    Fallback detection using image processing to find rectangular objects near faces.
-    Useful when YOLO fails due to angle or partial occlusion.
-    """
-    suspicious_rects = []
-    orig_h, orig_w = frame.shape[:2]
-    
-    # 3. Add heuristic fallback: Convert frame to grayscale + contours
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edged = cv2.Canny(blurred, 50, 150)
-    
-    contours, _ = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    for cnt in contours:
-        # Approximate the contour
-        peri = cv2.arcLength(cnt, True)
-        approx = cv2.approxPolyDP(cnt, 0.04 * peri, True)
-        
-        # We are looking for 4-pointed shapes (rectangles)
-        if len(approx) == 4:
-            x, y, w, h = cv2.boundingRect(approx)
-            aspect_ratio = float(max(w, h)) / (float(min(w, h)) + 1e-6)
-            
-            # Phones typically have AR between 1.5 and 3.0
-            if 1.4 < aspect_ratio < 3.2 and float(w) > 30.0 and float(h) > 30.0:
-                cx, cy = float(x) + float(w)/2.0, float(y) + float(h)/2.0
-                
-                # Check proximity to any face
-                is_near_face = False
-                for face in face_boxes:
-                    fx = float(face["x"])
-                    fy = float(face["y"])
-                    fw = float(face["w"])
-                    fh = float(face["h"])
-                    # Expanded face region
-                    if (fx - 150.0 < cx < fx + fw + 150.0) and (fy - 150.0 < cy < fy + fh + 150.0):
-                        is_near_face = True
-                        break
-                
-                if is_near_face:
-                    # Explicitly cast everything to float to satisfy lints
-                    fx1 = float(x)
-                    fy1 = float(y)
-                    fx2 = float(x) + float(w)
-                    fy2 = float(y) + float(h)
-                    
-                    suspicious_rects.append({
-                        "bbox": [fx1, fy1, fx2, fy2],
-                        "aspect_ratio": float(int(aspect_ratio * 100)) / 100.0
-                    })
-                    
-    return suspicious_rects
-
 
 def detect_objects(frame: np.ndarray, face_boxes: list = []) -> dict:
     """
@@ -274,15 +226,9 @@ def analyze_frame(frame: np.ndarray, interview_id: Optional[str] = None) -> dict
     
     # Start with non-phone alerts
     alerts = [a for a in object_result["alerts"] if "Phone" not in a]
-    is_suspicious = object_result["person_count"] > 1 or not face_result.get("face_detected", False)
+    is_suspicious = object_result["person_count"] > 1
 
     phone_detected = object_result.get("raw_phone_detected", False)
-    
-    # Fallback heuristic if YOLO didn't find a phone
-    if not phone_detected:
-        suspicious_rects = detect_heuristics(frame, face_result.get("faces", []))
-        if len(suspicious_rects) > 0:
-            phone_detected = True
 
     if interview_id:
         s_id = str(interview_id)

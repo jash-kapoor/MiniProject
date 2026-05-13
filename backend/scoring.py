@@ -2,6 +2,18 @@ import re
 import spacy
 import librosa
 import numpy as np
+import google.generativeai as genai
+import os
+import json
+from dotenv import load_dotenv
+
+load_dotenv()
+
+api_key = os.environ.get("GEMINI_API_KEY")
+if not api_key:
+    print("WARNING: GEMINI_API_KEY environment variable is missing. AI scoring will be disabled.")
+else:
+    genai.configure(api_key=api_key)
 
 # Load spaCy model
 nlp = spacy.load("en_core_web_sm")
@@ -121,19 +133,27 @@ def calculate_score(features: dict) -> dict:
     duration = features.get("duration_seconds", 1)
 
     # --- 1. Content Relevance (0-20) ---
+    content_relevance = 0.0
+    
+    # Start with a base of 10/20 for ANY answer over 15 words
+    if word_count > 15:
+        content_relevance = 10.0
+        
+    # Add up to 6 bonus points for strong vocabulary words found (cap at 2 points per word, max 6 points total)
     strong_word_count = sum(1 for w in words if w.lower() in STRONG_VOCABULARY)
-    relevance_ratio = float(strong_word_count) / max(float(word_count), 1.0)
-    content_relevance = float(min(20.0, float(relevance_ratio * 200)))
-
-    # Base score for genuine answers over 20 words
-    if word_count > 20:
-        content_relevance = max(8.0, content_relevance)
-
-    # Bonus for longer, substantive answers
-    if word_count >= 50:
-        content_relevance = min(20.0, content_relevance + 4.0)
-    if word_count >= 100:
-        content_relevance = min(20.0, content_relevance + 3.0)
+    vocab_bonus = min(6.0, strong_word_count * 2.0)
+    content_relevance += vocab_bonus
+    
+    # Add 2 bonus points if answer is over 50 words
+    if word_count > 50:
+        content_relevance += 2.0
+        
+    # Add 2 bonus points if answer is over 100 words
+    if word_count > 100:
+        content_relevance += 2.0
+        
+    # Hard cap at 20
+    content_relevance = min(20.0, content_relevance)
 
     # --- 2. Fluency (0-20) [Fairness Normalized] ---
     filler_ratio = filler_count / max(word_count, 1)
@@ -274,3 +294,32 @@ def calculate_rolling_confidence(features: dict) -> float:
         rate_score = 50.0 - float(diff)
         
     return float(round(float(fluency_score + rate_score), 1))
+
+def score_with_gemini(question: str, transcript: str) -> dict:
+    prompt = f"""You are an expert interview evaluator. Be a strict evaluator. A perfect 20/20 should only be given for truly exceptional answers. An average good answer should score 13-16/20 per dimension. Reserve 17-20 for outstanding responses. Score the following interview answer strictly as JSON with no extra text.
+
+Question: {question}
+Answer: {transcript}
+
+Return ONLY this JSON structure, nothing else:
+{{
+  "content_relevance": <0-20, how relevant and substantive the answer is to the question>,
+  "fluency": <0-20, how smooth and natural the delivery reads>,
+  "vocabulary": <0-20, quality and variety of words used>,
+  "confidence": <0-20, how confident and assertive the answer sounds>,
+  "structure": <0-20, how well organized the answer is>,
+  "feedback": "<one sentence of constructive feedback>",
+  "overall_score": <sum of above 5 scores>
+}}"""
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:-3]
+        elif text.startswith("```"):
+            text = text[3:-3]
+        return json.loads(text.strip())
+    except Exception as e:
+        print(f"Gemini scoring failed: {e}")
+        return None

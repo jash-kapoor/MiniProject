@@ -8,6 +8,9 @@ import time
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 import cv2
 import numpy as np
@@ -40,6 +43,7 @@ from scoring import (
     calculate_rolling_confidence,
     calculate_score,
     extract_speech_features,
+    score_with_gemini,
 )
 from whisper_model import transcribe_audio
 
@@ -298,6 +302,7 @@ async def transcribe(
 @app.post("/analyze-answer")
 async def analyze_answer(
     file: UploadFile = File(...),
+    question: str = Form(""),
     interview_id: Optional[int] = None,
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(get_current_user),
@@ -320,7 +325,15 @@ async def analyze_answer(
         features["transcript"] = transcript
 
         # Step 3: Score
-        scores = calculate_score(features)
+        ai_scored = False
+        scores = None
+        if os.environ.get("GEMINI_API_KEY"):
+            scores = score_with_gemini(question, transcript)
+            if scores:
+                ai_scored = True
+                
+        if not scores:
+            scores = calculate_score(features)
 
         # Step 4: Persist Audio
         timestamp = int(time.time())
@@ -333,6 +346,7 @@ async def analyze_answer(
             "audio_file_path": permanent_path,
             "features": {k: v for k, v in features.items() if k != "transcript"},
             "scores": scores,
+            "ai_scored": ai_scored,
         }
 
         # Store in database if interview_id provided

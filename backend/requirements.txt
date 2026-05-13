@@ -15,3 +15,5 @@ pydantic[email]
 passlib[bcrypt]
 python-jose[cryptography]
 PyJWT>=2.1.0
+google-generativeai
+python-dotenv

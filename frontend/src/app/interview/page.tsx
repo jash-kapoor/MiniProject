@@ -58,6 +58,7 @@ export default function InterviewPage() {
   const flagCountRef = useRef(0);
   const [faceWarningVisible, setFaceWarningVisible] = useState(false);
   const [faceDetectionPct, setFaceDetectionPct] = useState(100);
+  const consecutiveFaceMissCount = useRef(0);
 
   // ─── Refs ───────────────────────────────────
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -274,16 +275,20 @@ const startMonitoring = () => {
       if (faceDetected) {
         faceDetectedFrames.current += 1;
         faceNotDetectedSince.current = null;
+        consecutiveFaceMissCount.current = 0;
         setFaceWarningVisible(false);
       } else {
-        if (!faceNotDetectedSince.current) {
-          faceNotDetectedSince.current = Date.now();
-        }
-        setFaceWarningVisible(true);
-        if (isRecordingRef.current && Date.now() - faceNotDetectedSince.current > 30000) { // 30 seconds
-          toast.error("Interview terminated: Face not detected for 30 seconds.", { id: 'proctor-terminate', duration: 5000 });
-          setTimeout(terminateInterview, 4000);
-          return;
+        consecutiveFaceMissCount.current += 1;
+        if (consecutiveFaceMissCount.current >= 5) {
+          if (!faceNotDetectedSince.current) {
+            faceNotDetectedSince.current = Date.now();
+          }
+          setFaceWarningVisible(true);
+          if (isRecordingRef.current && Date.now() - faceNotDetectedSince.current > 30000) { // 30 seconds
+            toast.error("Interview terminated: Face not detected for 30 seconds.", { id: 'proctor-terminate', duration: 5000 });
+            setTimeout(terminateInterview, 4000);
+            return;
+          }
         }
       }
       setFaceDetectionPct(Math.round((faceDetectedFrames.current / totalFrames.current) * 100));
@@ -392,6 +397,7 @@ const startMonitoring = () => {
       setIsAnalyzing(true);
       const analyzeForm = new FormData();
       analyzeForm.append("file", blob, "recording.webm");
+      analyzeForm.append("question", SAMPLE_QUESTIONS[currentQuestionIdx]);
       if (interviewId) {
         analyzeForm.append("interview_id", interviewId.toString());
       }
