@@ -296,21 +296,47 @@ def calculate_rolling_confidence(features: dict) -> float:
     return float(round(float(fluency_score + rate_score), 1))
 
 def score_with_gemini(question: str, transcript: str) -> dict:
-    prompt = f"""You are an expert interview evaluator. Be a strict evaluator. A perfect 20/20 should only be given for truly exceptional answers. An average good answer should score 13-16/20 per dimension. Reserve 17-20 for outstanding responses. Score the following interview answer strictly as JSON with no extra text.
+    prompt = f"""You are a strict professional interview evaluator. Evaluate ONLY what is literally written — do not give benefit of the doubt or infer intent. Most answers should score 11-15 out of 20. Scores of 18-20 are rare and only for truly exceptional answers.
 
 Question: {question}
-Answer: {transcript}
+Candidate's Answer: {transcript}
 
-Return ONLY this JSON structure, nothing else:
-{{
-  "content_relevance": <0-20, how relevant and substantive the answer is to the question>,
-  "fluency": <0-20, how smooth and natural the delivery reads>,
-  "vocabulary": <0-20, quality and variety of words used>,
-  "confidence": <0-20, how confident and assertive the answer sounds>,
-  "structure": <0-20, how well organized the answer is>,
-  "feedback": "<one sentence of constructive feedback>",
-  "overall_score": <sum of above 5 scores>
-}}"""
+Score each dimension using ONLY these specific rules:
+
+FLUENCY (0-20) — measure actual smoothness of expression:
+- Deduct 3 points for each grammatically broken or incomplete sentence
+- Deduct 2 points for each filler phrase ("I think", "and then", "like", "basically")
+- Deduct 2 points for repeated words or ideas within same answer
+- Start at 20 and subtract. Minimum 0.
+
+VOCABULARY (0-20) — measure word quality:
+- Count professional/precise words used (implemented, coordinated, optimized, etc.)
+- Penalize vague words: "things", "stuff", "good", "nice", "very", "a lot"
+- Penalize grammatically incorrect word usage ("companies like values who can")
+- Average answer with mixed vocabulary = 12-14. Only rich precise vocabulary = 17+.
+
+CONTENT_RELEVANCE (0-20) — does it directly answer the question:
+- Does the answer address exactly what was asked? 
+- Generic answers that could apply to any question = 10-13
+- Specific, question-targeted answer with examples = 15-18
+
+CONFIDENCE (0-20) — assertiveness and certainty:
+- Hedging phrases ("I think", "maybe", "I feel like") each deduct 2 points
+- Clear assertive statements add points
+- Start at 16, add/subtract based on above
+
+STRUCTURE (0-20) — organization:
+- No clear structure (just stream of consciousness) = 8-10
+- Some structure but rambling = 11-14  
+- Clear intro → body → conclusion = 15-18
+- Perfect STAR format = 19-20
+
+feedback: Identify the single most impactful weakness with a specific example from their answer.
+
+overall_score: Sum of all 5 scores.
+
+Return ONLY this JSON, no markdown, no explanation:
+{{"content_relevance": X, "fluency": X, "vocabulary": X, "confidence": X, "structure": X, "feedback": "...", "overall_score": X}}"""
     try:
         model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(prompt)
@@ -319,7 +345,17 @@ Return ONLY this JSON structure, nothing else:
             text = text[7:-3]
         elif text.startswith("```"):
             text = text[3:-3]
-        return json.loads(text.strip())
+            
+        result = json.loads(text.strip())
+        
+        if result.get("overall_score", 0) > 95:
+            dimensions = ["content_relevance", "fluency", "vocabulary", "confidence", "structure"]
+            if all(result.get(dim, 0) > 18 for dim in dimensions):
+                for dim in dimensions:
+                    result[dim] = max(0, result[dim] - 3)
+                result["overall_score"] = sum(result[dim] for dim in dimensions)
+                
+        return result
     except Exception as e:
         print(f"Gemini scoring failed: {e}")
         return None
