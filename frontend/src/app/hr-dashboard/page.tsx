@@ -34,7 +34,12 @@ export default function HRDashboard() {
   const [candidateName, setCandidateName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
+  const [meetingPath, setMeetingPath] = useState("");
   const [isCreatingSession, setIsCreatingSession] = useState(false);
+
+  // Inline toast state for copy feedback
+  const [copied, setCopied] = useState(false);
+
   const router = useRouter();
 
   useEffect(() => {
@@ -51,10 +56,7 @@ export default function HRDashboard() {
     
     setIsCreatingSession(true);
     try {
-      // 1. Create candidate (mocking this flow for now, normally you'd lookup/create)
-      // We'll use candidate ID 1 (Alice) as a fallback if not implementing full user creation
-      
-      // 2. Create the Interview record
+      // Create the Interview record — backend assigns candidate from auth token
       const token = localStorage.getItem("voxassess_token");
       const intRes = await fetch(`${BACKEND_URL}/interviews/`, {
         method: "POST",
@@ -62,14 +64,13 @@ export default function HRDashboard() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        // For simplicity in this demo, assigning to current user context
-        body: JSON.stringify({ job_title: jobTitle, candidate_id: 1 })
+        body: JSON.stringify({ job_title: jobTitle })
       });
       
       if (!intRes.ok) throw new Error("Failed to create interview");
       const interviewData = await intRes.json();
       
-      // 3. Generate the live session link
+      // Generate the live session link
       const liveRes = await fetch(`${BACKEND_URL}/live-sessions?interview_id=${interviewData.id}`, {
         method: "POST",
         headers: {
@@ -83,6 +84,7 @@ export default function HRDashboard() {
       // Create the frontend link
       const link = `${window.location.origin}/interview/live/${liveData.meetingId}`;
       setMeetingLink(link);
+      setMeetingPath(`/interview/live/${liveData.meetingId}`);
       
     } catch (err) {
       console.error("Session creation error:", err);
@@ -94,7 +96,8 @@ export default function HRDashboard() {
 
   const copyLink = () => {
     navigator.clipboard.writeText(meetingLink);
-    alert("Session link copied to clipboard!");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   useEffect(() => {
@@ -134,6 +137,11 @@ export default function HRDashboard() {
     { label: "Avg. Match", value: `${avgMatch}%`, color: "text-emerald-400" },
   ];
 
+  const filteredInterviews = interviews.filter((interview) => 
+    interview.candidate.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    interview.job_title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <main className="min-h-screen bg-[#0a0f1a] p-6 lg:p-10 text-gray-100">
       <div className="max-w-6xl mx-auto space-y-10">
@@ -156,7 +164,6 @@ export default function HRDashboard() {
               </svg>
               Export Dataset (CSV)
             </a>
-            <button onClick={() => { window.location.href = `${BACKEND_URL}/export-dataset?format=csv`; }} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition text-sm">Export Page Data</button>
           </div>
         </header>
 
@@ -226,13 +233,16 @@ export default function HRDashboard() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
                       </button>
+                      {copied && (
+                        <span className="text-xs font-semibold text-emerald-400 whitespace-nowrap pr-2 animate-pulse">Copied!</span>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <button onClick={() => setMeetingLink("")} className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-white font-medium rounded-lg transition text-sm">
+                    <button onClick={() => { setMeetingLink(""); setMeetingPath(""); setCopied(false); }} className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-white font-medium rounded-lg transition text-sm">
                       Create Another
                     </button>
-                    <Link href={meetingLink.replace(window.location.origin, '')} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg text-center transition text-sm group">
+                    <Link href={meetingPath} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg text-center transition text-sm group">
                       Join as Host <span className="inline-block group-hover:translate-x-1 transition-transform">→</span>
                     </Link>
                   </div>
@@ -260,6 +270,14 @@ export default function HRDashboard() {
           <div className="overflow-hidden rounded-2xl border border-[#1e293b] bg-[#111827]">
             {isLoading ? (
               <div className="p-20 text-center text-gray-500">Loading assessments...</div>
+            ) : interviews.length === 0 ? (
+              /* Empty State */
+              <div className="p-16 flex flex-col items-center justify-center text-center">
+                <svg className="w-16 h-16 text-gray-700 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-gray-500 text-sm max-w-sm">No assessments yet. Candidates will appear here after completing interviews.</p>
+              </div>
             ) : (
               <table className="w-full text-left">
                 <thead>
@@ -273,38 +291,51 @@ export default function HRDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1e293b]">
-                  {interviews
-                    .filter((interview) => 
-                      interview.candidate.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                      interview.job_title.toLowerCase().includes(searchQuery.toLowerCase())
-                    )
-                    .map((interview) => (
-                    <tr key={interview.id} className="hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-6 py-4 font-medium text-white">{interview.candidate.full_name}</td>
-                      <td className="px-6 py-4 text-gray-400 text-sm">{interview.job_title}</td>
-                      <td className="px-6 py-4 text-gray-400 text-sm">{new Date(interview.created_at).toLocaleDateString()}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 rounded-full bg-gray-700 overflow-hidden">
-                            <div className="h-full bg-indigo-500" style={{ width: `${interview.evaluation?.overall_score || 0}%` }} />
-                          </div>
-                          <span className="text-xs font-bold text-white">{interview.evaluation?.overall_score || 'N/A'}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
-                          interview.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
-                          interview.status === 'flagged' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
-                          'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                        }`}>
-                          {interview.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <Link href={`/reports/${interview.id}`} className="text-indigo-400 hover:text-indigo-300 font-medium text-sm">Review Results</Link>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredInterviews.map((interview) => {
+                    const score = interview.evaluation?.overall_score;
+                    const hasScore = score !== undefined && score !== null;
+                    const roundedScore = hasScore ? Math.round(score) : 0;
+                    const scoreColor = hasScore
+                      ? roundedScore >= 80 ? 'text-emerald-400' : roundedScore >= 60 ? 'text-amber-400' : 'text-red-400'
+                      : '';
+                    const barColor = hasScore
+                      ? roundedScore >= 80 ? 'bg-emerald-500' : roundedScore >= 60 ? 'bg-amber-500' : 'bg-red-500'
+                      : 'bg-gray-600';
+
+                    return (
+                      <tr key={interview.id} className="hover:bg-white/[0.02] transition-colors group">
+                        <td className="px-6 py-4 font-medium text-white">{interview.candidate.full_name}</td>
+                        <td className="px-6 py-4 text-gray-400 text-sm">{interview.job_title}</td>
+                        <td className="px-6 py-4 text-gray-400 text-sm">{new Date(interview.created_at).toLocaleDateString()}</td>
+                        <td className="px-6 py-4">
+                          {hasScore ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-1.5 rounded-full bg-gray-700 overflow-hidden">
+                                <div className={`h-full ${barColor}`} style={{ width: `${roundedScore}%` }} />
+                              </div>
+                              <span className={`text-xs font-bold ${scoreColor}`}>{roundedScore}%</span>
+                            </div>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-gray-500/10 text-gray-400 border border-gray-500/20">
+                              Pending
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                            interview.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+                            interview.status === 'flagged' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
+                            'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          }`}>
+                            {interview.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <Link href={`/reports/${interview.id}`} className="text-indigo-400 hover:text-indigo-300 font-medium text-sm">Review Results</Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -314,4 +345,3 @@ export default function HRDashboard() {
     </main>
   );
 }
-
