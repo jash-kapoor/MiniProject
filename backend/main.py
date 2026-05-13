@@ -52,12 +52,7 @@ models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI(title="VoxAssess API", description="AI Interview Evaluation System API")
 
-# Include routers
-app.include_router(users.router)
-app.include_router(interviews.router)
-app.include_router(stream.router)
-
-# Configure CORS
+# Configure CORS — must be added before routers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -70,6 +65,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(users.router)
+app.include_router(interviews.router)
+app.include_router(stream.router)
 
 # Temp directory for uploaded files
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "temp_uploads")
