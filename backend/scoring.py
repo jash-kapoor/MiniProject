@@ -2,7 +2,7 @@ import re
 import spacy
 import librosa
 import numpy as np
-import google.generativeai as genai
+from google import genai
 import os
 import json
 from dotenv import load_dotenv
@@ -12,8 +12,9 @@ load_dotenv()
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
     print("WARNING: GEMINI_API_KEY environment variable is missing. AI scoring will be disabled.")
+    client = None
 else:
-    genai.configure(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 
 # Load spaCy model
 nlp = spacy.load("en_core_web_sm")
@@ -338,8 +339,12 @@ overall_score: Sum of all 5 scores.
 Return ONLY this JSON, no markdown, no explanation:
 {{"content_relevance": X, "fluency": X, "vocabulary": X, "confidence": X, "structure": X, "feedback": "...", "overall_score": X}}"""
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt)
+        if client is None:
+            raise ValueError("Gemini Client not initialized due to missing API key")
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
         text = response.text.strip()
         if text.startswith("```json"):
             text = text[7:-3]
