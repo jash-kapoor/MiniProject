@@ -11,14 +11,23 @@ face_cascade = cv2.CascadeClassifier(
 )
 
 # --- MediaPipe Face Mesh for 3D Orientation ---
-mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(
-    static_image_mode=False,
-    max_num_faces=1,
-    refine_landmarks=True,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5
-)
+try:
+    mp_face_mesh = mp.solutions.face_mesh
+    face_mesh = mp_face_mesh.FaceMesh(
+        static_image_mode=False,
+        max_num_faces=1,
+        refine_landmarks=True,
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5
+    )
+except AttributeError:
+    print("Warning: mediapipe.solutions not found. Eye contact tracking will be disabled.")
+    mp_face_mesh = None
+    face_mesh = None
+except Exception as e:
+    print(f"Warning: Failed to initialize MediaPipe Face Mesh: {e}")
+    mp_face_mesh = None
+    face_mesh = None
 
 # --- Global Eye Contact Tracker ---
 # Tracks { interview_id: { "last_lookaway_time": float, "is_alerting": bool } }
