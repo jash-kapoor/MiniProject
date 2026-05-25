@@ -24,6 +24,7 @@ export default function HomeCandidate({ user }: { user: UserInfo }) {
       try {
         const token = localStorage.getItem("voxassess_token");
         const res = await fetch(`${BACKEND_URL}/users/me/interviews`, {
+          credentials: "include",
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {

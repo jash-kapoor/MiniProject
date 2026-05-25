@@ -25,10 +25,21 @@ type Interview = {
   evaluation?: Evaluation;
 };
 
+type PaginatedInterviews = {
+  items: Interview[];
+  total: number;
+  skip: number;
+  limit: number;
+};
+
+const PAGE_SIZE = 20;
+
 export default function HRDashboard() {
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [totalInterviews, setTotalInterviews] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
 
   // Live Session State
   const [candidateName, setCandidateName] = useState("");
@@ -60,6 +71,7 @@ export default function HRDashboard() {
       const token = localStorage.getItem("voxassess_token");
       const intRes = await fetch(`${BACKEND_URL}/interviews/`, {
         method: "POST",
+        credentials: "include",
         headers: { 
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
@@ -73,6 +85,7 @@ export default function HRDashboard() {
       // Generate the live session link
       const liveRes = await fetch(`${BACKEND_URL}/live-sessions?interview_id=${interviewData.id}`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Authorization": `Bearer ${token}`
         }
@@ -103,15 +116,19 @@ export default function HRDashboard() {
   useEffect(() => {
     async function fetchInterviews() {
       const token = localStorage.getItem("voxassess_token");
+      setIsLoading(true);
       try {
-        const res = await fetch(`${BACKEND_URL}/interviews/all`, {
+        const skip = currentPage * PAGE_SIZE;
+        const res = await fetch(`${BACKEND_URL}/interviews/all?skip=${skip}&limit=${PAGE_SIZE}`, {
+          credentials: "include",
           headers: {
             "Authorization": `Bearer ${token}`
           }
         });
         if (res.ok) {
-          const data = await res.json();
-          setInterviews(data);
+          const data: PaginatedInterviews = await res.json();
+          setInterviews(data.items);
+          setTotalInterviews(data.total);
         } else if (res.status === 401) {
           router.push("/login?auth=expired");
         }
@@ -122,7 +139,7 @@ export default function HRDashboard() {
       }
     }
     fetchInterviews();
-  }, []);
+  }, [currentPage, router]);
 
   const activeJobsCount = new Set(interviews.map(i => i.job_title)).size;
   const interviewsWithScores = interviews.filter(i => i.evaluation?.overall_score !== undefined);
@@ -141,6 +158,7 @@ export default function HRDashboard() {
     interview.candidate.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     interview.job_title.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const totalPages = Math.max(1, Math.ceil(totalInterviews / PAGE_SIZE));
 
   return (
     <main className="min-h-screen bg-[#0a0f1a] p-6 lg:p-10 text-gray-100">
@@ -256,7 +274,10 @@ export default function HRDashboard() {
         <section>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold text-white">Recent Assessments</h2>
-            <div className="relative">
+            <div className="relative flex items-center gap-3">
+              <span className="text-xs text-gray-500">
+                Page {currentPage + 1} of {totalPages}
+              </span>
               <input 
                 type="text" 
                 value={searchQuery}
@@ -340,6 +361,24 @@ export default function HRDashboard() {
               </table>
             )}
           </div>
+          {!isLoading && totalInterviews > PAGE_SIZE && (
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setCurrentPage((page) => Math.max(0, page - 1))}
+                disabled={currentPage === 0}
+                className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setCurrentPage((page) => Math.min(totalPages - 1, page + 1))}
+                disabled={currentPage >= totalPages - 1}
+                className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </section>
       </div>
     </main>

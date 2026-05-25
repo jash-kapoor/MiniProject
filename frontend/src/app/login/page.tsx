@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { BACKEND_URL } from "@/app/config";
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -37,6 +37,7 @@ export default function LoginPage() {
       const res = await fetch(`${BACKEND_URL}/users/login`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        credentials: "include",
         body: formData,
       });
 
@@ -48,6 +49,7 @@ export default function LoginPage() {
         // Fetch user profile to get role
         try {
           const userRes = await fetch(`${BACKEND_URL}/users/me`, {
+            credentials: "include",
             headers: { Authorization: `Bearer ${token}` }
           });
           if (userRes.ok) {
@@ -126,12 +128,26 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-8 text-center text-gray-500 text-sm">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Link href="/signup" className="text-blue-400 hover:underline">
             Sign Up
           </Link>
         </p>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[#0a0f1a] flex items-center justify-center p-6 text-gray-400">
+          Loading...
+        </main>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

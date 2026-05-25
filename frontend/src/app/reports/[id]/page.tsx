@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any, react/no-unescaped-entities */
+
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -78,6 +80,7 @@ export default function ReportPage() {
     async function fetchReport() {
       try {
         const res = await fetch(`${BACKEND_URL}/interviews/${id}`, {
+          credentials: "include",
           headers: {
             "Authorization": `Bearer ${token}`
           }
@@ -176,7 +179,7 @@ export default function ReportPage() {
           </div>
           
           <div className="flex items-center gap-4 print:hidden">
-            <button onClick={() => window.print()} className="px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition text-sm font-semibold">
+            <button onClick={() => window.open(`${BACKEND_URL}/reports/${id}/pdf`, '_blank')} className="px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition text-sm font-semibold">
               Download PDF
             </button>
             <button onClick={handleShare} className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition text-sm shadow-xl shadow-indigo-600/20">

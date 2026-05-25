@@ -1,21 +1,21 @@
-import os
 from datetime import datetime, timedelta
-from typing import Optional, Any
-from jose import jwt, JWTError
-from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from typing import Optional
+
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 from sqlalchemy.orm import Session
+
+from config import settings
 from database import get_db
 import models
 
-# --- Configuration ---
-SECRET_KEY = os.getenv("SECRET_KEY", "7ca45e54ceacba5d3d4c3a3b5a1b5c1d1e1f1g1h1i1j1k1l1m1n1o1p1q1r1s1t")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440 # 24 hours
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login", auto_error=False)
 
 # --- Password Utilities ---
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -32,18 +32,28 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
     return encoded_jwt
 
 # --- Dependency ---
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+def get_current_user(request: Request, token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    # First try reading token from cookie
+    cookie_token = request.cookies.get("voxassess_session")
+    if cookie_token:
+        token = cookie_token
+    
+    # If no cookie and no bearer token, raise 401
+    if not token:
+        raise credentials_exception
+
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
@@ -54,3 +64,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if user is None:
         raise credentials_exception
     return user
+
+
+def require_hr(current_user: models.User = Depends(get_current_user)) -> models.User:
+    if current_user.role not in ("hr", "admin"):
+        raise HTTPException(status_code=403, detail="HR access required")
+    return current_user

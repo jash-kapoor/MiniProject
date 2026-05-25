@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
@@ -71,6 +73,7 @@ export default function PracticeDashboard() {
     async function fetchUserInterviews() {
       try {
         const res = await fetch(`${BACKEND_URL}/users/me/interviews`, {
+          credentials: "include",
           headers: { "Authorization": `Bearer ${token}` }
         });
         if (!res.ok) {

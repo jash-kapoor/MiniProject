@@ -26,11 +26,12 @@ export default function HomeHR({ user }: { user: UserInfo }) {
       // Create an interview record first
       const intRes = await fetch(`${BACKEND_URL}/interviews/`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ job_title: "Live Interview", candidate_id: 1 }),
+        body: JSON.stringify({ job_title: "Live Interview" }),
       });
 
       if (!intRes.ok) throw new Error("Failed to create interview");
@@ -41,6 +42,7 @@ export default function HomeHR({ user }: { user: UserInfo }) {
         `${BACKEND_URL}/live-sessions?interview_id=${interviewData.id}`,
         {
           method: "POST",
+          credentials: "include",
           headers: { Authorization: `Bearer ${token}` },
         }
       );

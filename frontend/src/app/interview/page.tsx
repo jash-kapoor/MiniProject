@@ -39,6 +39,8 @@ type MonitoringAlert = {
 export default function InterviewPage() {
   const router = useRouter();
   // ─── State ──────────────────────────────────
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [questionsLoading, setQuestionsLoading] = useState(true);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const isRecordingRef = useRef(false);
@@ -94,6 +96,7 @@ export default function InterviewPage() {
       const token = localStorage.getItem("voxassess_token");
       fetch(`${BACKEND_URL}/log-violation/${interviewId}`, {
         method: "POST",
+        credentials: "include",
         headers: { 
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
@@ -123,6 +126,7 @@ export default function InterviewPage() {
       try {
         const res = await fetch(`${BACKEND_URL}/interviews/`, {
           method: "POST",
+          credentials: "include",
           headers: { 
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`
@@ -139,7 +143,32 @@ export default function InterviewPage() {
         console.error("Failed to initialize interview:", err);
       }
     }
+
+    async function fetchQuestions() {
+      try {
+        const qRes = await fetch(`${BACKEND_URL}/questions/`, {
+          credentials: "include",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (qRes.ok) {
+          const qData = await qRes.json();
+          if (qData.length > 0) {
+            setQuestions(qData.map((q: { text: string }) => q.text));
+          } else {
+            setQuestions(SAMPLE_QUESTIONS);
+          }
+        } else {
+          setQuestions(SAMPLE_QUESTIONS);
+        }
+      } catch {
+        setQuestions(SAMPLE_QUESTIONS);
+      } finally {
+        setQuestionsLoading(false);
+      }
+    }
+
     initInterview();
+    fetchQuestions();
   }, []);
 
   // ─── Webcam Setup ───────────────────────────
@@ -248,6 +277,7 @@ const startMonitoring = () => {
             const token = localStorage.getItem("voxassess_token");
           const res = await fetch(`${BACKEND_URL}/monitor-frame`, {
             method: "POST",
+            credentials: "include",
             headers: {
               "Authorization": `Bearer ${token}`
             },
@@ -376,14 +406,15 @@ const startMonitoring = () => {
         formData.append("interview_id", interviewId.toString());
       }
 
-       const token = localStorage.getItem("voxassess_token");
-       const res = await fetch(`${BACKEND_URL}/transcribe`, {
-         method: "POST",
-         headers: {
-           "Authorization": `Bearer ${token}`
-         },
-         body: formData,
-       });
+      const token = localStorage.getItem("voxassess_token");
+      const res = await fetch(`${BACKEND_URL}/transcribe`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        },
+        body: formData,
+      });
       if (res.status === 401) {
         router.push("/login?auth=expired");
         return;
@@ -397,13 +428,14 @@ const startMonitoring = () => {
       setIsAnalyzing(true);
       const analyzeForm = new FormData();
       analyzeForm.append("file", blob, "recording.webm");
-      analyzeForm.append("question", SAMPLE_QUESTIONS[currentQuestionIdx]);
+      analyzeForm.append("question", (questions[currentQuestionIdx] || SAMPLE_QUESTIONS[currentQuestionIdx]));
       if (interviewId) {
         analyzeForm.append("interview_id", interviewId.toString());
       }
 
        const analyzeRes = await fetch(`${BACKEND_URL}/analyze-answer`, {
          method: "POST",
+         credentials: "include",
          headers: {
            "Authorization": `Bearer ${token}`
          },
@@ -428,7 +460,7 @@ const startMonitoring = () => {
 
   // ─── Navigation ─────────────────────────────
   const nextQuestion = async () => {
-    if (currentQuestionIdx < SAMPLE_QUESTIONS.length - 1) {
+    if (currentQuestionIdx < (questions.length || SAMPLE_QUESTIONS.length) - 1) {
       setCurrentQuestionIdx((prev) => prev + 1);
       setTranscript("");
       setAnalysis(null);
@@ -442,6 +474,7 @@ const startMonitoring = () => {
            const token = localStorage.getItem("voxassess_token");
            const res = await fetch(`${BACKEND_URL}/finalize-interview/${interviewId}`, {
              method: "POST",
+             credentials: "include",
              headers: {
                "Authorization": `Bearer ${token}`
              },
@@ -522,7 +555,7 @@ const startMonitoring = () => {
             <span className="text-white font-semibold">
               {currentQuestionIdx + 1}
             </span>{" "}
-            / {SAMPLE_QUESTIONS.length}
+            / {questions.length || SAMPLE_QUESTIONS.length}
           </span>
           <button
             onClick={nextQuestion}
@@ -549,7 +582,7 @@ const startMonitoring = () => {
               Interview Question
             </p>
             <h2 className="text-xl font-semibold text-white leading-relaxed">
-              {SAMPLE_QUESTIONS[currentQuestionIdx]}
+              {questions[currentQuestionIdx] || SAMPLE_QUESTIONS[currentQuestionIdx]}
             </h2>
           </div>
 

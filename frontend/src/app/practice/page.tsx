@@ -35,6 +35,7 @@ export default function PracticeDashboard() {
     async function fetchUserSessions() {
       try {
         const res = await fetch(`${BACKEND_URL}/users/me/interviews`, {
+          credentials: "include",
           headers: { "Authorization": `Bearer ${token}` }
         });
         

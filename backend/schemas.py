@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -9,8 +9,14 @@ class UserBase(BaseModel):
     role: str = "candidate"
 
 class UserCreate(UserBase):
-
     password: str
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in ("candidate", "hr"):
+            raise ValueError("Role must be 'candidate' or 'hr'")
+        return v
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -35,7 +41,7 @@ class InterviewBase(BaseModel):
     job_title: str
 
 class InterviewCreate(InterviewBase):
-    candidate_id: int
+    pass
 
 class InterviewResponse(InterviewBase):
     id: int
@@ -62,6 +68,37 @@ class EvaluationCreate(EvaluationBase):
 class EvaluationResponse(EvaluationBase):
     id: int
     interview_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PaginatedInterviews(BaseModel):
+    items: List[InterviewResponse]
+    total: int
+    skip: int
+    limit: int
+
+
+class PaginatedUsers(BaseModel):
+    items: List[UserResponse]
+    total: int
+    skip: int
+    limit: int
+
+
+# Question Schemas
+class QuestionBase(BaseModel):
+    text: str
+    category: str = "general"
+    difficulty: str = "medium"
+
+class QuestionCreate(QuestionBase):
+    pass
+
+class QuestionResponse(QuestionBase):
+    id: int
     created_at: datetime
 
     class Config:

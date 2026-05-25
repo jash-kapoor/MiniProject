@@ -1,0 +1,75 @@
+MiniProject
+Γö£ΓöÇΓöÇ README.md
+Γö£ΓöÇΓöÇ backend
+Γöé   Γö£ΓöÇΓöÇ Dockerfile
+Γöé   Γö£ΓöÇΓöÇ alembic
+Γöé   Γöé   Γö£ΓöÇΓöÇ env.py
+Γöé   Γöé   ΓööΓöÇΓöÇ versions
+Γöé   Γöé       ΓööΓöÇΓöÇ 20260517_0001_initial_schema.py
+Γöé   Γö£ΓöÇΓöÇ alembic.ini
+Γöé   Γö£ΓöÇΓöÇ auth.py
+Γöé   Γö£ΓöÇΓöÇ config.py
+Γöé   Γö£ΓöÇΓöÇ database.py
+Γöé   Γö£ΓöÇΓöÇ logger.py
+Γöé   Γö£ΓöÇΓöÇ logs
+Γöé   Γöé   ΓööΓöÇΓöÇ voxassess.log
+Γöé   Γö£ΓöÇΓöÇ main.py
+Γöé   Γö£ΓöÇΓöÇ models.py
+Γöé   Γö£ΓöÇΓöÇ monitoring.py
+Γöé   Γö£ΓöÇΓöÇ rate_limit.py
+Γöé   Γö£ΓöÇΓöÇ requirements.txt
+Γöé   Γö£ΓöÇΓöÇ routers
+Γöé   Γöé   Γö£ΓöÇΓöÇ __init__.py
+Γöé   Γöé   Γö£ΓöÇΓöÇ interviews.py
+Γöé   Γöé   Γö£ΓöÇΓöÇ stream.py
+Γöé   Γöé   ΓööΓöÇΓöÇ users.py
+Γöé   Γö£ΓöÇΓöÇ schemas.py
+Γöé   Γö£ΓöÇΓöÇ scoring.py
+Γöé   Γö£ΓöÇΓöÇ seed_db.py
+Γöé   Γö£ΓöÇΓöÇ upload_security.py
+Γöé   ΓööΓöÇΓöÇ whisper_model.py
+Γö£ΓöÇΓöÇ docker-compose.dev.yml
+Γö£ΓöÇΓöÇ docker-compose.yml
+Γö£ΓöÇΓöÇ frontend
+Γöé   Γö£ΓöÇΓöÇ Dockerfile
+Γöé   Γö£ΓöÇΓöÇ README.md
+Γöé   Γö£ΓöÇΓöÇ eslint.config.mjs
+Γöé   Γö£ΓöÇΓöÇ next.config.ts
+Γöé   Γö£ΓöÇΓöÇ package-lock.json
+Γöé   Γö£ΓöÇΓöÇ package.json
+Γöé   Γö£ΓöÇΓöÇ postcss.config.mjs
+Γöé   Γö£ΓöÇΓöÇ public
+Γöé   Γöé   Γö£ΓöÇΓöÇ file.svg
+Γöé   Γöé   Γö£ΓöÇΓöÇ globe.svg
+Γöé   Γöé   Γö£ΓöÇΓöÇ next.svg
+Γöé   Γöé   Γö£ΓöÇΓöÇ vercel.svg
+Γöé   Γöé   ΓööΓöÇΓöÇ window.svg
+Γöé   Γö£ΓöÇΓöÇ src
+Γöé   Γöé   Γö£ΓöÇΓöÇ app
+Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ config.ts
+Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ dashboard
+Γöé   Γöé   Γöé   Γöé   ΓööΓöÇΓöÇ page.tsx
+Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ favicon.ico
+Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ globals.css
+Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ hr-dashboard
+Γöé   Γöé   Γöé   Γöé   ΓööΓöÇΓöÇ page.tsx
+Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ interview
+Γöé   Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ live
+Γöé   Γöé   Γöé   Γöé   ΓööΓöÇΓöÇ page.tsx
+Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ layout.tsx
+Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ login
+Γöé   Γöé   Γöé   Γöé   ΓööΓöÇΓöÇ page.tsx
+Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ page.tsx
+Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ practice
+Γöé   Γöé   Γöé   Γöé   ΓööΓöÇΓöÇ page.tsx
+Γöé   Γöé   Γöé   Γö£ΓöÇΓöÇ reports
+Γöé   Γöé   Γöé   Γöé   ΓööΓöÇΓöÇ [id]
+Γöé   Γöé   Γöé   ΓööΓöÇΓöÇ signup
+Γöé   Γöé   Γöé       ΓööΓöÇΓöÇ page.tsx
+Γöé   Γöé   ΓööΓöÇΓöÇ components
+Γöé   Γöé       Γö£ΓöÇΓöÇ HomeCandidate.tsx
+Γöé   Γöé       Γö£ΓöÇΓöÇ HomeHR.tsx
+Γöé   Γöé       Γö£ΓöÇΓöÇ LayoutContent.tsx
+Γöé   Γöé       ΓööΓöÇΓöÇ Navbar.tsx
+Γöé   ΓööΓöÇΓöÇ tsconfig.json
+ΓööΓöÇΓöÇ structure.txt

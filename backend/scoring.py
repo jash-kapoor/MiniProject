@@ -360,7 +360,22 @@ Return ONLY this JSON, no markdown, no explanation:
                     result[dim] = max(0, result[dim] - 3)
                 result["overall_score"] = sum(result[dim] for dim in dimensions)
                 
+        # Compute fairness locally (same formula as calculate_score)
+        cr = result.get("content_relevance", 0)
+        voc = result.get("vocabulary", 0)
+        flu = result.get("fluency", 0)
+        conf = result.get("confidence", 0)
+        fairness_score = (cr * 0.5) + (voc * 0.5)
+        content_avg = (cr + voc) / 2
+        delivery_avg = (flu + conf) / 2
+        fairness_adjustment = 0.0
+        if content_avg > delivery_avg:
+            fairness_adjustment = (content_avg - delivery_avg) * 0.5
+        result["fairness_score"] = round(fairness_score, 1)
+        result["fairness_adjustment"] = round(fairness_adjustment, 1)
+
         return result
     except Exception as e:
-        print(f"Gemini scoring failed: {e}")
+        logger.exception("Gemini scoring failed: %s", e)
         return None
+

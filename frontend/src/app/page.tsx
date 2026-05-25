@@ -26,6 +26,7 @@ export default function Home() {
       }
       try {
         const res = await fetch(`${BACKEND_URL}/users/me`, {
+          credentials: "include",
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { StreamVideo, StreamVideoClient, Call, StreamTheme, SpeakerLayout, CallControls } from '@stream-io/video-react-sdk';
+import { StreamVideo, StreamVideoClient, Call, StreamTheme, SpeakerLayout, CallControls, StreamCall } from '@stream-io/video-react-sdk';
 import '@stream-io/video-react-sdk/dist/css/styles.css';
 import { BACKEND_URL } from '@/app/config';
 
@@ -53,6 +53,7 @@ export default function LiveMeetingPage() {
                   const token = localStorage.getItem("voxassess_token");
                   const res = await fetch(`${BACKEND_URL}/detect`, {
                     method: "POST",
+                    credentials: "include",
                     headers: { "Authorization": `Bearer ${token}` },
                     body: formData,
                   });
@@ -94,6 +95,7 @@ export default function LiveMeetingPage() {
 
       try {
         const res = await fetch(`${BACKEND_URL}/stream/token`, {
+          credentials: "include",
           headers: { Authorization: `Bearer ${token}` }
         });
         

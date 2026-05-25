@@ -1,148 +1,177 @@
-# VoxAssess — AI Interview Evaluation Platform
+# VoxAssess AI
 
-An intelligent, AI-powered interview evaluation system with real-time proctoring, speech analysis, and role-based dashboards.
+VoxAssess AI is a full-stack interview evaluation platform for candidate practice and HR-led live assessment. It combines FastAPI, SQLAlchemy, PostgreSQL/SQLite, Next.js, Whisper transcription, Gemini-assisted scoring, YOLO object detection, and MediaPipe eye-contact tracking.
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)
-![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
-![FastAPI](https://img.shields.io/badge/FastAPI-latest-009688?logo=fastapi)
+## Architecture
 
----
-
-## 🌟 Features
-
-- **AI-Powered Evaluation** — Whisper Speech-to-Text + NLP scoring for fluency, vocabulary, confidence, and content relevance.
-- **Real-Time Proctoring** — YOLOv8 object detection for phone/person monitoring during interviews.
-- **Eye Contact Tracking** — MediaPipe-based gaze analysis.
-- **Role-Based Dashboards** — Separate views for Candidates and HR/Recruiters.
-- **Live Interview Sessions** — Real-time video interviews with AI monitoring.
-
----
-
-## 🛠️ Tech Stack
-
-| Layer     | Technology                          |
-|-----------|-------------------------------------|
-| Frontend  | Next.js 16, React, Tailwind CSS, Framer Motion |
-| Backend   | FastAPI, SQLAlchemy, SQLite         |
-| AI/ML     | OpenAI Whisper, YOLOv8, MediaPipe   |
-| Auth      | JWT (python-jose), bcrypt           |
-
----
-
-## 💻 Prerequisites
-
-Before running this project, ensure your system has the following installed:
-
-- **Python** 3.10+ (3.12 recommended)
-- **Node.js** 18+ (with npm)
-- **Git**
-- **FFmpeg** (Required for Whisper audio processing)
-  - **Windows**: Install via Winget: `winget install Gyan.FFmpeg`
-  - **macOS**: Install via Homebrew: `brew install ffmpeg`
-  - **Linux**: Install via apt: `sudo apt install ffmpeg`
-
----
-
-## 🚀 Complete Local Setup Guide
-
-Follow these steps to get both the frontend and backend running locally on your machine.
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/jash-kapoor/MiniProject.git
-cd MiniProject
+```mermaid
+flowchart LR
+    Candidate["Candidate Browser"] --> Frontend["Next.js Frontend"]
+    HR["HR Browser"] --> Frontend
+    Frontend --> API["FastAPI Backend"]
+    API --> Auth["JWT Auth"]
+    API --> DB["PostgreSQL or SQLite"]
+    API --> AI["Whisper, Gemini, YOLO, MediaPipe"]
+    API --> Files["Recordings Volume"]
+    API --> Logs["Rotating Logs"]
 ```
 
-### 2. Backend Setup (FastAPI & AI Models)
+## Tech Stack
 
-The backend handles the AI video analysis, transcription, scoring, and database interactions.
+| Layer | Technology |
+| --- | --- |
+| Frontend | Next.js 16, TypeScript, React 19, Tailwind CSS |
+| Backend | FastAPI, SQLAlchemy 2, Alembic |
+| Database | SQLite for local dev, PostgreSQL 15 for Docker/prod |
+| AI/ML | faster-whisper, Gemini, YOLOv8, MediaPipe, spaCy, librosa |
+| Auth | JWT, passlib bcrypt |
+| Ops | Docker Compose, python-dotenv, Pydantic Settings, SlowAPI rate limiting |
+| Logging | Python logging with console and rotating file output |
+
+## Prerequisites
+
+- Python 3.12 recommended
+- Node.js 20 recommended
+- Docker and Docker Compose for PostgreSQL setup
+- FFmpeg for audio processing
+- A spaCy English model: `python -m spacy download en_core_web_sm`
+
+## Environment Variables
+
+Backend settings live in `backend/.env`. Use `backend/.env.example`, `backend/.env.development`, or `backend/.env.production` as templates.
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `SECRET_KEY` | Yes | JWT signing secret. Use a long random value in production. |
+| `DATABASE_URL` | Yes | SQLite or PostgreSQL SQLAlchemy URL. |
+| `STREAM_API_KEY` | For live video | Stream Video API key. |
+| `STREAM_API_SECRET` | For live video | Stream Video API secret. |
+| `GEMINI_API_KEY` | Optional | Enables Gemini scoring. |
+| `ALLOWED_ORIGINS` | Yes | Comma-separated CORS origins. |
+| `UPLOAD_DIR` | Yes | Temporary upload directory. |
+| `RECORDINGS_DIR` | Yes | Persistent audio recording directory. |
+| `LOG_DIR` | Yes | Log directory. |
+| `MAX_UPLOAD_SIZE_MB` | Yes | Upload size limit. Defaults to 50. |
+
+Frontend settings live in `frontend/.env.local`.
+
+| Variable | Description |
+| --- | --- |
+| `NEXT_PUBLIC_BACKEND_URL` | Public backend API base URL. Defaults to `http://127.0.0.1:8000`. |
+
+## Local Setup With SQLite
 
 ```bash
-# 1. Navigate to the backend directory
 cd backend
-
-# 2. Create a Python virtual environment
 python -m venv venv
-
-# 3. Activate the virtual environment
-# On Windows:
-.\venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
-
-# 4. Install all required dependencies
+venv\Scripts\activate
 pip install -r requirements.txt
-
-# 5. Initialize/Seed the database (Optional but recommended for test users)
-python seed_db.py
-
-# 6. Start the backend server
+python -m spacy download en_core_web_sm
+copy .env.development .env
+alembic upgrade head
 uvicorn main:app --reload
 ```
 
-> **Important Notes:** 
-> - The backend will run on **http://127.0.0.1:8000**.
-> - On the very first run, YOLO model weights (`yolov8n.pt`) and Whisper base models will be downloaded automatically. This may take a few minutes depending on your internet speed.
-
-### 3. Frontend Setup (Next.js Application)
-
-The frontend provides the user interface for candidates and recruiters. Open a **new terminal window** (keep the backend running) and follow these steps:
+In another terminal:
 
 ```bash
-# 1. Navigate to the frontend directory
 cd frontend
-
-# 2. Install Node.js dependencies
 npm install
-
-# 3. Start the development server
+copy .env.local.example .env.local
 npm run dev
 ```
 
-> The frontend will run on **http://localhost:3000**.
+Open `http://localhost:3000`.
 
----
+## PostgreSQL Migrations
 
-## ⚙️ Environment Variables (Optional)
+Alembic is configured in `backend/alembic.ini` and reads `DATABASE_URL` from the backend environment through `backend/config.py`.
 
-If you plan on using live video streams, you will need to configure environment variables.
+Run migrations manually:
 
-1. Navigate to the `backend/` directory.
-2. Copy the example file: `cp .env.example .env`
-3. Update the values in `.env`:
+```bash
+cd backend
+alembic upgrade head
+```
 
-| Variable            | Description              | Default / Fallback |
-|---------------------|--------------------------|--------------------|
-| `SECRET_KEY`        | JWT signing secret       | `your_secret_key`  |
-| `STREAM_API_KEY`    | Stream Video API key     | Required for Live  |
-| `STREAM_API_SECRET` | Stream Video API secret  | Required for Live  |
+Create a future migration after changing models:
 
----
+```bash
+cd backend
+alembic revision --autogenerate -m "describe change"
+alembic upgrade head
+```
 
-## 🎮 Usage Guide
+SQLite still works for lightweight development. PostgreSQL uses pooled connections and JSONB columns for queryable scoring/report payloads.
 
-Once both servers are running, navigate to [http://localhost:3000](http://localhost:3000) in your browser.
+## Docker Setup
 
-### Authentication
-- **Sign Up**: Go to `/signup` to create a candidate account.
-- **Login**: Go to `/login` to access the platform.
+Production-like PostgreSQL stack:
 
-### Candidate Experience
-- **Homepage**: Personalized welcome and quick stats.
-- **Practice Interview**: Navigate to `/practice` to test your environment and start AI-monitored interviews.
-- **Live Interview Room**: During the interview (`/interview`), your webcam captures your responses, monitors your eye contact, and ensures proctoring compliance.
-- **Results Dashboard**: Navigate to `/dashboard` to view detailed insights and scores on past performances.
+```bash
+docker compose up --build
+```
 
-### Recruiter (HR) Experience
-- **HR Dashboard**: Access `/hr-dashboard` to view all candidate assessments.
-- **Link Generation**: Generate unique live interview links to distribute to applicants.
-> *Note: To set a user as HR, manually update their `role` field to `"hr"` in the local SQLite database.*
+Development stack with hot reload:
 
----
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
 
-## 📚 API Documentation
+The Docker stack starts:
 
-Once the backend is actively running, you can explore the interactive API docs:
-- **Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **ReDoc**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
+| Service | Port | Notes |
+| --- | --- | --- |
+| `db` | internal 5432 | PostgreSQL 15 with persistent `postgres_data` volume |
+| `backend` | 8000 | Runs Alembic migrations before FastAPI |
+| `frontend` | 3000 | Serves the Next.js app |
+
+Recordings persist at `backend/recordings`.
+
+## API Summary
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Backend health check |
+| `POST` | `/users/signup` | Create candidate account, rate limited to 5/minute |
+| `POST` | `/users/login` | JWT login, rate limited to 10/minute |
+| `GET` | `/users/me` | Current user profile |
+| `GET` | `/users/` | Paginated users list |
+| `POST` | `/interviews/` | Create interview for current authenticated user |
+| `GET` | `/interviews/` | Paginated interview list |
+| `GET` | `/interviews/all` | Paginated HR interview list with relationships |
+| `GET` | `/interviews/{id}` | Interview details |
+| `POST` | `/transcribe` | Audio transcription, audio-only, 50MB max, rate limited to 10/minute |
+| `POST` | `/analyze-answer` | Transcribe, score, and persist answer audio, rate limited to 10/minute |
+| `POST` | `/monitor-frame` | Proctoring frame analysis, rate limited to 60/minute |
+| `POST` | `/finalize-interview/{id}` | Final score persistence and session-state cleanup |
+| `POST` | `/live-sessions` | Create live meeting ID |
+| `GET` | `/stream/token` | Stream Video token |
+| `GET` | `/export-dataset` | Export evaluation data as JSON or CSV |
+
+## Security And Reliability
+
+- Configuration is centralized in Pydantic settings and loaded from `.env`.
+- PostgreSQL uses connection pooling with `pool_pre_ping`.
+- File uploads are restricted to audio MIME types and extensions.
+- Upload filenames are sanitized before disk writes.
+- Request rate limits protect auth, transcription, scoring, and monitoring endpoints.
+- Request logging includes method, path, user ID, status, and response time.
+- Runtime logs rotate at 10MB with 5 backups under `backend/logs`.
+- Per-interview proctoring state is isolated and thread-safe.
+
+## Known Limitations
+
+- In-memory WebRTC signaling and meeting alerts are not distributed across multiple backend replicas.
+- The initial HR session creator assigns the interview owner from the authenticated JWT. Inviting a separate candidate account requires a future candidate invitation workflow.
+- YOLO and Whisper model downloads can make first startup slow.
+- The local SQLite path is intended for development only.
+
+## Future Scope
+
+- Candidate invitation entities and email delivery.
+- Persisted distributed signaling via Redis.
+- Admin RBAC and audit logs.
+- Richer evaluation rubrics by job family.
+- Background workers for transcription/scoring.
+- Cloud object storage for recordings.

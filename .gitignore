@@ -59,3 +59,6 @@ recordings/
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+backend/.env
+frontend/.env.local

@@ -9,6 +9,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [role, setRole] = useState("candidate");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -22,7 +23,8 @@ export default function SignupPage() {
       const res = await fetch(`${BACKEND_URL}/users/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, full_name: fullName }),
+        credentials: "include",
+        body: JSON.stringify({ email, password, full_name: fullName, role }),
       });
 
       if (res.ok) {
@@ -72,6 +74,17 @@ export default function SignupPage() {
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition"
               placeholder="john@example.com"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">I am signing up as</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition appearance-none"
+            >
+              <option value="candidate" className="bg-[#111827]">Candidate</option>
+              <option value="hr" className="bg-[#111827]">HR Recruiter</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>

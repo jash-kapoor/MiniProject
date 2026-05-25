@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BACKEND_URL } from "@/app/config";
 
 export default function Navbar() {
@@ -12,6 +12,23 @@ export default function Navbar() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
 
+  const handleLogout = useCallback(async () => {
+    try {
+      await fetch(`${BACKEND_URL}/users/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (e) {
+      console.error("Logout request failed:", e);
+    }
+    localStorage.removeItem("voxassess_token");
+    setIsLoggedIn(false);
+    setUserEmail(null);
+    setUserRole(null);
+    router.push("/");
+    router.refresh();
+  }, [router]);
+
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem("voxassess_token");
@@ -20,6 +37,7 @@ export default function Navbar() {
         try {
           // Optionally fetch user info to show in navbar
           const res = await fetch(`${BACKEND_URL}/users/me`, {
+            credentials: "include",
             headers: { Authorization: `Bearer ${token}` }
           });
           if (res.ok) {
@@ -45,16 +63,7 @@ export default function Navbar() {
     // Listen for storage changes (in case of login/logout in other tabs)
     window.addEventListener("storage", checkAuth);
     return () => window.removeEventListener("storage", checkAuth);
-  }, [pathname]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("voxassess_token");
-    setIsLoggedIn(false);
-    setUserEmail(null);
-    router.push("/");
-    // Force a re-render/refresh for any components relying on localstorage
-    router.refresh();
-  };
+  }, [pathname, handleLogout]);
 
   // Hide Navbar during active interview
   if (pathname?.startsWith("/interview")) return null;

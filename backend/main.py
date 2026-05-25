@@ -24,6 +24,8 @@ from fastapi import (
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
+    Request,
+    Response,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -35,9 +37,16 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import database
 import models
-from auth import get_current_user
+import asyncio
+from auth import get_current_user, require_hr
 from monitoring import analyze_frame
-from routers import interviews, stream, users
+from routers import interviews, stream, users, questions
+from cleanup import cleanup_old_recordings
+from pdf_generator import generate_interview_pdf
+from rate_limit import limiter
+from upload_security import secure_filename, validate_audio_upload
+from config import settings
+from pathlib import Path
 from scoring import (
     analyze_sentiment,
     calculate_rolling_confidence,
@@ -70,6 +79,34 @@ app.add_middleware(
 app.include_router(users.router)
 app.include_router(interviews.router)
 app.include_router(stream.router)
+app.include_router(questions.router)
+
+@app.on_event("startup")
+async def on_startup():
+    # Seed default questions if table is empty
+    db = next(database.get_db())
+    try:
+        if db.query(models.Question).count() == 0:
+            default_questions = [
+                models.Question(text="Tell me about yourself and your professional background.", category="general", difficulty="easy"),
+                models.Question(text="What is your greatest strength and how has it helped you professionally?", category="behavioral", difficulty="easy"),
+                models.Question(text="Describe a challenging project you led. What was the outcome?", category="behavioral", difficulty="medium"),
+                models.Question(text="Where do you see yourself in 5 years?", category="general", difficulty="easy"),
+                models.Question(text="Why are you interested in this role?", category="general", difficulty="easy"),
+                models.Question(text="Tell me about a time you had to handle a conflict with a teammate.", category="behavioral", difficulty="medium"),
+                models.Question(text="What is your approach to problem-solving under pressure?", category="situational", difficulty="medium"),
+                models.Question(text="Describe a situation where you had to learn something new quickly.", category="behavioral", difficulty="medium"),
+                models.Question(text="How do you prioritize tasks when you have multiple deadlines?", category="situational", difficulty="medium"),
+                models.Question(text="What makes you a good fit for our team?", category="general", difficulty="easy"),
+            ]
+            db.add_all(default_questions)
+            db.commit()
+            logger.info("Seeded %d default questions", len(default_questions))
+    finally:
+        db.close()
+
+    # Start background cleanup
+    asyncio.create_task(cleanup_old_recordings())
 
 # Temp directory for uploaded files
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "temp_uploads")
@@ -263,47 +300,57 @@ def get_meeting_alerts(
 #  1. POST /transcribe — Whisper transcription
 # ─────────────────────────────────────────────────────────
 @app.post("/transcribe")
+@limiter.limit("10/minute")
 async def transcribe(
+    request: Request,
     file: UploadFile = File(...),
     current_user: models.User = Depends(get_current_user),
 ):
     """
     Accepts an audio file and returns the transcribed text.
     """
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    content, original_name = await validate_audio_upload(file)
+    file_name = f"{uuid.uuid4().hex}_{original_name}"
+    file_path = Path(UPLOAD_DIR) / file_name
     try:
         with open(file_path, "wb") as f:
-            content = await file.read()
             f.write(content)
 
-        transcript = transcribe_audio(file_path)
+        transcript = transcribe_audio(str(file_path))
         
         # Real-time analytics for Live Room
         sentiment = analyze_sentiment(transcript)
-        features = extract_speech_features(file_path, transcript)
+        features = extract_speech_features(str(file_path), transcript)
         confidence_rolling = calculate_rolling_confidence(features)
 
         return {
             "transcript": transcript, 
-            "filename": file.filename,
+            "filename": original_name,
             "sentiment": sentiment,
             "confidence_rolling": confidence_rolling
         }
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
     finally:
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        if file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception:
+                pass
 
 
 # ─────────────────────────────────────────────────────────
 #  2. POST /analyze-answer — Speech features + scoring
 # ─────────────────────────────────────────────────────────
 @app.post("/analyze-answer")
+@limiter.limit("10/minute")
 async def analyze_answer(
+    request: Request,
     file: UploadFile = File(...),
     question: str = Form(""),
-    interview_id: Optional[int] = None,
+    interview_id: Optional[int] = Form(None),
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -311,17 +358,18 @@ async def analyze_answer(
     Accepts an audio file, transcribes it, extracts speech features,
     and calculates an interview score.
     """
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    content, original_name = await validate_audio_upload(file)
+    temp_file_name = f"{uuid.uuid4().hex}_{original_name}"
+    temp_file_path = Path(UPLOAD_DIR) / temp_file_name
     try:
-        with open(file_path, "wb") as f:
-            content = await file.read()
+        with open(temp_file_path, "wb") as f:
             f.write(content)
 
         # Step 1: Transcribe
-        transcript = transcribe_audio(file_path)
+        transcript = transcribe_audio(str(temp_file_path))
 
         # Step 2: Extract features
-        features = extract_speech_features(file_path, transcript)
+        features = extract_speech_features(str(temp_file_path), transcript)
         features["transcript"] = transcript
 
         # Step 3: Score
@@ -337,9 +385,10 @@ async def analyze_answer(
 
         # Step 4: Persist Audio
         timestamp = int(time.time())
-        safe_name = f"{timestamp}_{interview_id or 'anon'}_{file.filename}"
+        os.makedirs(RECORDINGS_DIR, exist_ok=True)
+        safe_name = secure_filename(f"{timestamp}_{interview_id or 'anon'}_{original_name}")
         permanent_path = os.path.join(RECORDINGS_DIR, safe_name)
-        shutil.move(file_path, permanent_path)
+        shutil.move(str(temp_file_path), permanent_path)
 
         result = {
             "transcript": transcript,
@@ -364,11 +413,16 @@ async def analyze_answer(
                 db.commit()
 
         return result
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        # If it failed before moving, cleanup the temp file
-        if os.path.exists(file_path):
-            os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+    finally:
+        if temp_file_path.exists():
+            try:
+                temp_file_path.unlink()
+            except Exception:
+                pass
 
 
 @app.post("/finalize-interview/{interview_id}")
@@ -554,7 +608,7 @@ async def log_violation(
 # ─────────────────────────────────────────────────────────
 @app.get("/interview-report")
 def get_interview_report(
-    interview_id: str,
+    interview_id: int,
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -564,7 +618,7 @@ def get_interview_report(
     """
     report = (
         db.query(models.InterviewReport)
-        .filter(models.InterviewReport.interview_id == int(interview_id))
+        .filter(models.InterviewReport.interview_id == interview_id)
         .first()
     )
     if not report:
@@ -622,7 +676,7 @@ def get_interview_report(
 def export_dataset(
     format: str = "json",
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_hr),
 ):
     """
     Exports all interview evaluation data as CSV or JSON.
@@ -645,12 +699,13 @@ def export_dataset(
         }
         
         # Add detailed metrics if available
-        metrics = ev.detailed_feedback.get("metrics", {})
+        feedback = ev.detailed_feedback if isinstance(ev.detailed_feedback, dict) else {}
+        metrics = feedback.get("metrics", {})
         for k, v in metrics.items():
             base_info[f"metric_{k}"] = v
             
         # Add answer details (this will create multiple rows for CSV)
-        answers = ev.detailed_feedback.get("answers", [])
+        answers = feedback.get("answers", [])
         if not answers:
             data.append(base_info)
         else:
@@ -689,3 +744,20 @@ def export_dataset(
         )
     
     return data
+
+
+@app.get("/reports/{interview_id}/pdf")
+def download_report_pdf(
+    interview_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    try:
+        pdf_bytes = generate_interview_pdf(interview_id, db)
+        return StreamingResponse(
+            iter([pdf_bytes]),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=voxassess_report_{interview_id}.pdf"}
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

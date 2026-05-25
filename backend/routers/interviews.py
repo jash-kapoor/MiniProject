@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
 
 from database import get_db
 import models
 import schemas
-from auth import get_current_user
+from auth import get_current_user, require_hr
 
 router = APIRouter(
     prefix="/interviews",
@@ -28,17 +27,29 @@ def create_interview(interview: schemas.InterviewCreate, db: Session = Depends(g
     db.refresh(new_interview)
     return new_interview
 
-@router.get("/", response_model=List[schemas.InterviewResponse])
-def get_interviews(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    interviews = db.query(models.Interview).offset(skip).limit(limit).all()
-    return interviews
+@router.get("/", response_model=schemas.PaginatedInterviews)
+def get_interviews(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.Interview)
+    total = query.count()
+    interviews = query.offset(skip).limit(limit).all()
+    return {"items": interviews, "total": total, "skip": skip, "limit": limit}
 
-@router.get("/all", response_model=List[schemas.InterviewResponse])
-def get_all_interviews_detailed(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    # Using join to get candidate and evaluation if they exist
-    interviews = db.query(models.Interview).offset(skip).limit(limit).all()
-    # Pydantic's from_attributes will handle the relationship mapping
-    return interviews
+@router.get("/all", response_model=schemas.PaginatedInterviews)
+def get_all_interviews_detailed(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_hr),
+):
+    query = db.query(models.Interview)
+    total = query.count()
+    interviews = query.offset(skip).limit(limit).all()
+    return {"items": interviews, "total": total, "skip": skip, "limit": limit}
+
 @router.get("/{interview_id}", response_model=schemas.InterviewResponse)
 def get_interview(interview_id: int, db: Session = Depends(get_db)):
     db_interview = db.query(models.Interview).filter(models.Interview.id == interview_id).first()
