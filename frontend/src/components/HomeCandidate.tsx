@@ -36,10 +36,10 @@ export default function HomeCandidate({ user }: { user: UserInfo }) {
           const avg =
             completed.length > 0
               ? completed.reduce(
-                  (sum: number, i: { evaluation?: { overall_score?: number } }) =>
-                    sum + (i.evaluation?.overall_score || 0),
-                  0
-                ) / completed.length
+                (sum: number, i: { evaluation?: { overall_score?: number } }) =>
+                  sum + (i.evaluation?.overall_score || 0),
+                0
+              ) / completed.length
               : 0;
           setStats({ total: data.length, avgScore: Math.round(avg) });
         }
@@ -143,7 +143,7 @@ export default function HomeCandidate({ user }: { user: UserInfo }) {
                 Total Interviews
               </p>
               <p className="text-3xl font-bold text-blue-400">
-                {loading ? "—" : stats.total}
+                {loading ? "-" : stats.total}
               </p>
             </div>
             <div className="p-6 rounded-2xl bg-[#111827] border border-[#1e293b] text-center">
@@ -151,7 +151,7 @@ export default function HomeCandidate({ user }: { user: UserInfo }) {
                 Average Score
               </p>
               <p className="text-3xl font-bold text-emerald-400">
-                {loading ? "—" : stats.avgScore > 0 ? `${stats.avgScore}%` : "N/A"}
+                {loading ? "-" : stats.avgScore > 0 ? `${stats.avgScore}%` : "N/A"}
               </p>
             </div>
           </motion.div>

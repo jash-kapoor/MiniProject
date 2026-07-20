@@ -64,24 +64,24 @@ export default function HRDashboard() {
   const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!candidateName || !jobTitle) return;
-    
+
     setIsCreatingSession(true);
     try {
-      // Create the Interview record — backend assigns candidate from auth token
+      // Create the Interview record - backend assigns candidate from auth token
       const token = localStorage.getItem("voxassess_token");
       const intRes = await fetch(`${BACKEND_URL}/interviews/`, {
         method: "POST",
         credentials: "include",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({ job_title: jobTitle })
       });
-      
+
       if (!intRes.ok) throw new Error("Failed to create interview");
       const interviewData = await intRes.json();
-      
+
       // Generate the live session link
       const liveRes = await fetch(`${BACKEND_URL}/live-sessions?interview_id=${interviewData.id}`, {
         method: "POST",
@@ -90,15 +90,15 @@ export default function HRDashboard() {
           "Authorization": `Bearer ${token}`
         }
       });
-      
+
       if (!liveRes.ok) throw new Error("Failed to generate live session");
       const liveData = await liveRes.json();
-      
+
       // Create the frontend link
       const link = `${window.location.origin}/interview/live/${liveData.meetingId}`;
       setMeetingLink(link);
       setMeetingPath(`/interview/live/${liveData.meetingId}`);
-      
+
     } catch (err) {
       console.error("Session creation error:", err);
       alert("Failed to create live session.");
@@ -143,7 +143,7 @@ export default function HRDashboard() {
 
   const activeJobsCount = new Set(interviews.map(i => i.job_title)).size;
   const interviewsWithScores = interviews.filter(i => i.evaluation?.overall_score !== undefined);
-  const avgMatch = interviewsWithScores.length > 0 
+  const avgMatch = interviewsWithScores.length > 0
     ? Math.round(interviewsWithScores.reduce((sum, i) => sum + (i.evaluation?.overall_score || 0), 0) / interviewsWithScores.length)
     : 0;
 
@@ -154,8 +154,8 @@ export default function HRDashboard() {
     { label: "Avg. Match", value: `${avgMatch}%`, color: "text-emerald-400" },
   ];
 
-  const filteredInterviews = interviews.filter((interview) => 
-    interview.candidate.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredInterviews = interviews.filter((interview) =>
+    interview.candidate.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     interview.job_title.toLowerCase().includes(searchQuery.toLowerCase())
   );
   const totalPages = Math.max(1, Math.ceil(totalInterviews / PAGE_SIZE));
@@ -172,7 +172,7 @@ export default function HRDashboard() {
             <p className="text-gray-400">Manage candidate assessments and AI-driven insights.</p>
           </div>
           <div className="flex gap-3">
-            <a 
+            <a
               href={`${BACKEND_URL}/export-dataset?format=csv`}
               download="voxassess_dataset.csv"
               className="px-4 py-2 rounded-lg bg-emerald-600/10 border border-emerald-500/20 hover:bg-emerald-600/20 text-emerald-400 transition text-sm flex items-center gap-2"
@@ -208,14 +208,14 @@ export default function HRDashboard() {
               </h2>
               <p className="text-indigo-200/70 text-sm">Create a secure, one-time link for a real-time AI-monitored interview.</p>
             </div>
-            
+
             <div className="flex-1 w-full bg-[#0a0f1a]/50 p-6 rounded-xl border border-white/5">
               {!meetingLink ? (
                 <form onSubmit={handleCreateSession} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-gray-400">Candidate Name</label>
-                      <input 
+                      <input
                         type="text" required
                         value={candidateName} onChange={e => setCandidateName(e.target.value)}
                         className="w-full bg-[#111827] border border-[#1e293b] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
@@ -224,7 +224,7 @@ export default function HRDashboard() {
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-gray-400">Job Role</label>
-                      <input 
+                      <input
                         type="text" required
                         value={jobTitle} onChange={e => setJobTitle(e.target.value)}
                         className="w-full bg-[#111827] border border-[#1e293b] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
@@ -232,8 +232,8 @@ export default function HRDashboard() {
                       />
                     </div>
                   </div>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={isCreatingSession}
                     className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white font-medium rounded-lg transition"
                   >
@@ -278,16 +278,16 @@ export default function HRDashboard() {
               <span className="text-xs text-gray-500">
                 Page {currentPage + 1} of {totalPages}
               </span>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search candidates..." 
+                placeholder="Search candidates..."
                 className="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-indigo-500/50 w-64 text-white"
               />
             </div>
           </div>
-          
+
           <div className="overflow-hidden rounded-2xl border border-[#1e293b] bg-[#111827]">
             {isLoading ? (
               <div className="p-20 text-center text-gray-500">Loading assessments...</div>
@@ -343,11 +343,10 @@ export default function HRDashboard() {
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
-                            interview.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
-                            interview.status === 'flagged' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
-                            'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          }`}>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${interview.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                              interview.status === 'flagged' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                                'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            }`}>
                             {interview.status}
                           </span>
                         </td>

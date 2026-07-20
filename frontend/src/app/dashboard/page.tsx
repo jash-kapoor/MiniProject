@@ -106,7 +106,7 @@ export default function PracticeDashboard() {
     ? Math.round(Math.max(...completedInterviews.map(i => i.evaluation?.overall_score || 0)))
     : 0;
 
-  // Prepare data for Recharts — only include interviews with score > 0
+  // Prepare data for Recharts - only include interviews with score > 0
   const chartData = [...completedInterviews]
     .reverse()
     .filter(session => session.evaluation?.overall_score && session.evaluation.overall_score > 0)
@@ -132,7 +132,7 @@ export default function PracticeDashboard() {
   return (
     <main className="min-h-screen bg-[#0a0f1a] p-6 lg:p-10 text-gray-100">
       <div className="max-w-6xl mx-auto space-y-10">
-        
+
         {/* Page Title & Action */}
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-8">
           <div>
@@ -152,28 +152,28 @@ export default function PracticeDashboard() {
           </Link>
         </header>
 
-        {/* Stats Grid — 3 equal-width cards */}
+        {/* Stats Grid - 3 equal-width cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="p-6 rounded-2xl bg-[#111827] border border-[#1e293b] flex flex-col justify-between">
             <div>
-               <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Average Score</p>
-               <p className="text-4xl font-black text-white">{avgScore}<span className="text-xl text-gray-500 ml-1">%</span></p>
+              <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Average Score</p>
+              <p className="text-4xl font-black text-white">{avgScore}<span className="text-xl text-gray-500 ml-1">%</span></p>
             </div>
             <p className="text-sm text-gray-500 mt-4">Across all completed sessions.</p>
           </div>
 
           <div className="p-6 rounded-2xl bg-[#111827] border border-[#1e293b] flex flex-col justify-between">
             <div>
-               <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">Sessions Completed</p>
-               <p className="text-4xl font-black text-white">{completedInterviews.length}</p>
+              <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">Sessions Completed</p>
+              <p className="text-4xl font-black text-white">{completedInterviews.length}</p>
             </div>
             <p className="text-sm text-gray-500 mt-4">Total completed interviews.</p>
           </div>
 
           <div className="p-6 rounded-2xl bg-[#111827] border border-[#1e293b] flex flex-col justify-between">
             <div>
-               <p className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">Best Score</p>
-               <p className="text-4xl font-black text-white">{bestScore}<span className="text-xl text-gray-500 ml-1">%</span></p>
+              <p className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">Best Score</p>
+              <p className="text-4xl font-black text-white">{bestScore}<span className="text-xl text-gray-500 ml-1">%</span></p>
             </div>
             <p className="text-sm text-gray-500 mt-4">Highest score achieved.</p>
           </div>
@@ -204,176 +204,176 @@ export default function PracticeDashboard() {
           </div>
         </div>
 
-        {/* Recent Activity — Completed Sessions */}
+        {/* Recent Activity - Completed Sessions */}
         <section>
           <h2 className="text-2xl font-bold text-white mb-6">Session History</h2>
-          
+
           {isLoading ? (
-             <div className="p-20 text-center text-gray-500 bg-[#111827] rounded-xl border border-gray-800">Loading your history...</div>
+            <div className="p-20 text-center text-gray-500 bg-[#111827] rounded-xl border border-gray-800">Loading your history...</div>
           ) : completedInterviews.length === 0 ? (
-             <div className="p-10 text-center text-gray-500 bg-[#111827] rounded-xl border border-gray-800">
-               <p className="mb-4">You havent completed any interviews yet.</p>
-               <Link href="/interview" className="text-blue-400 hover:text-blue-300 font-bold">Try one now!</Link>
-             </div>
+            <div className="p-10 text-center text-gray-500 bg-[#111827] rounded-xl border border-gray-800">
+              <p className="mb-4">You havent completed any interviews yet.</p>
+              <Link href="/interview" className="text-blue-400 hover:text-blue-300 font-bold">Try one now!</Link>
+            </div>
           ) : (
-             <div className="space-y-4">
-               {completedInterviews.map((session) => {
-                  const score = session.evaluation?.overall_score || 0;
-                  const isExpanded = expandedId === session.id;
-                  const details = session.evaluation?.detailed_feedback;
-                  const scoreLabel = getOverallLabel(score);
-                  const scoreBadgeColor = score >= 80 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 
-                                          score >= 60 ? 'border-amber-500/30 bg-amber-500/10 text-amber-400' : 
-                                          'border-red-500/30 bg-red-500/10 text-red-400';
-                  
-                  return (
-                    <div key={session.id} className="rounded-2xl border border-[#1e293b] bg-[#111827] overflow-hidden transition-all duration-300 shadow-sm hover:border-gray-700">
-                       {/* Header Bar */}
-                       <div 
-                         onClick={() => setExpandedId(isExpanded ? null : session.id)}
-                         className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer select-none"
-                       >
-                         <div className="flex-1">
-                           <div className="flex items-center gap-3 mb-1">
-                             <h3 className="font-bold text-lg text-white">{session.job_title}</h3>
-                             <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-white/5 text-gray-400">
-                               {new Date(session.created_at).toLocaleDateString()}
-                             </span>
-                           </div>
-                           <p className="text-sm text-gray-500">Session ID: #{session.id}</p>
-                         </div>
-                         
-                         <div className="flex items-center gap-6">
-                           {/* Main Score Badge with Label */}
-                           <div className={`px-4 py-2 rounded-xl border ${scoreBadgeColor}`}>
-                             <div className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-0.5">Overall</div>
-                             <div className="text-xl font-black">{Math.round(score)}%</div>
-                             <div className="text-[10px] font-semibold mt-0.5">{scoreLabel}</div>
-                           </div>
-                           
-                           <svg className={`w-5 h-5 text-gray-500 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                           </svg>
-                         </div>
-                       </div>
-                       
-                       {/* Expanded Details */}
-                       {isExpanded && (
-                         <div className="border-t border-[#1e293b] p-6 bg-black/20 animate-fade-in flex flex-col gap-8">
-                            
-                            {/* Actions */}
-                            <div className="flex justify-end gap-3">
-                               <Link 
-                                  href={`/reports/${session.id}`}
-                                  className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-semibold transition text-white border border-gray-700"
-                               >
-                                 Open Full Report
-                               </Link>
-                               <Link 
-                                  href={`/interview?job_title=${encodeURIComponent(session.job_title)}`}
-                                  className="px-4 py-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 text-sm font-semibold transition"
-                               >
-                                 Re-attempt Interview
-                               </Link>
-                            </div>
+            <div className="space-y-4">
+              {completedInterviews.map((session) => {
+                const score = session.evaluation?.overall_score || 0;
+                const isExpanded = expandedId === session.id;
+                const details = session.evaluation?.detailed_feedback;
+                const scoreLabel = getOverallLabel(score);
+                const scoreBadgeColor = score >= 80 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' :
+                  score >= 60 ? 'border-amber-500/30 bg-amber-500/10 text-amber-400' :
+                    'border-red-500/30 bg-red-500/10 text-red-400';
 
-                            {/* Answers Breakdown */}
-                            {details?.answers && details.answers.length > 0 && (
-                              <div className="space-y-6">
-                                <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500">Answer Breakdown</h4>
-                                {details.answers.map((answer, idx) => (
-                                  <div key={idx} className="bg-white/[0.02] border border-white/10 rounded-xl p-5 space-y-4">
-                                    <h5 className="text-sm font-bold text-white">Answer {idx + 1}</h5>
-                                    
-                                    {/* Transcript */}
-                                    {answer.transcript && (
-                                      <div className="bg-black/50 border border-gray-800 rounded-xl p-4 text-gray-300 text-sm leading-relaxed italic border-l-4 border-l-blue-500">
-                                        &ldquo;{answer.transcript}&rdquo;
-                                      </div>
-                                    )}
+                return (
+                  <div key={session.id} className="rounded-2xl border border-[#1e293b] bg-[#111827] overflow-hidden transition-all duration-300 shadow-sm hover:border-gray-700">
+                    {/* Header Bar */}
+                    <div
+                      onClick={() => setExpandedId(isExpanded ? null : session.id)}
+                      className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer select-none"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-bold text-lg text-white">{session.job_title}</h3>
+                          <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-white/5 text-gray-400">
+                            {new Date(session.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500">Session ID: #{session.id}</p>
+                      </div>
 
-                                    {/* Score Bars */}
-                                    {answer.scores && (
-                                      <div className="space-y-2">
-                                        {SCORE_DIMENSIONS.map(dim => {
-                                          const val = (answer.scores as any)[dim] ?? 0;
-                                          const pct = (val / 20) * 100;
-                                          const colors = getScoreColor(val, 20);
-                                          return (
-                                            <div key={dim} className="flex items-center gap-3">
-                                              <span className="text-[11px] text-gray-400 uppercase tracking-wider w-36 shrink-0">{dim.replace(/_/g, ' ')}</span>
-                                              <div className="flex-1 h-2.5 bg-white/5 rounded-full overflow-hidden">
-                                                <div className={`h-full rounded-full ${colors.bar} transition-all duration-500`} style={{ width: `${pct}%` }} />
-                                              </div>
-                                              <span className={`text-xs font-bold w-12 text-right ${colors.text}`}>{val}/20</span>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
+                      <div className="flex items-center gap-6">
+                        {/* Main Score Badge with Label */}
+                        <div className={`px-4 py-2 rounded-xl border ${scoreBadgeColor}`}>
+                          <div className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-0.5">Overall</div>
+                          <div className="text-xl font-black">{Math.round(score)}%</div>
+                          <div className="text-[10px] font-semibold mt-0.5">{scoreLabel}</div>
+                        </div>
 
-                                    {/* AI Feedback */}
-                                    {answer.scores?.feedback && (
-                                      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 flex items-start gap-3">
-                                        <span className="text-lg shrink-0">💡</span>
-                                        <div>
-                                          <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-1">AI Feedback</div>
-                                          <p className="text-sm text-blue-200/90 leading-relaxed">{answer.scores.feedback}</p>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Metrics (top-level aggregated scores if present) */}
-                            {details?.metrics && (
-                              <div>
-                                <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">Aggregated Metrics</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                                  {Object.entries(details.metrics).filter(([k]) => !['overall_score', 'fairness_adjustment'].includes(k)).map(([k, v]) => (
-                                    <div key={k} className="bg-white/5 border border-white/10 rounded-lg p-3 text-center">
-                                       <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{k.replace(/_/g, ' ')}</div>
-                                       <div className="text-lg font-bold text-white">{v as number}{k.includes('score') ? '' : '/20'}</div>
-                                    </div>
-                                  ))}
-                                  {details.metrics.fairness_adjustment ? (
-                                    <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-3 text-center">
-                                       <div className="text-[10px] text-rose-400 uppercase tracking-widest mb-1">Fairness Bias Shift</div>
-                                       <div className="text-lg font-bold text-rose-400">+{details.metrics.fairness_adjustment}</div>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Violations */}
-                            {details?.violations && details.violations.length > 0 && (
-                               <div>
-                                 <h4 className="text-xs font-bold uppercase tracking-widest text-red-500/80 mb-3">Proctoring Flags</h4>
-                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {details.violations.map((violation: any, idx: number) => (
-                                      <div key={idx} className="p-3 rounded-lg border flex items-start gap-3 bg-red-500/10 border-red-500/30 text-red-400">
-                                         <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                         </svg>
-                                         <div>
-                                           <div className="text-xs font-bold uppercase">{violation.type?.replace(/_/g, ' ') || 'Violation'}</div>
-                                           <div className="text-sm opacity-90">{violation.message || JSON.stringify(violation)}</div>
-                                         </div>
-                                      </div>
-                                    ))}
-                                 </div>
-                               </div>
-                            )}
-
-                         </div>
-                       )}
+                        <svg className={`w-5 h-5 text-gray-500 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
                     </div>
-                  );
-               })}
-             </div>
+
+                    {/* Expanded Details */}
+                    {isExpanded && (
+                      <div className="border-t border-[#1e293b] p-6 bg-black/20 animate-fade-in flex flex-col gap-8">
+
+                        {/* Actions */}
+                        <div className="flex justify-end gap-3">
+                          <Link
+                            href={`/reports/${session.id}`}
+                            className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-semibold transition text-white border border-gray-700"
+                          >
+                            Open Full Report
+                          </Link>
+                          <Link
+                            href={`/interview?job_title=${encodeURIComponent(session.job_title)}`}
+                            className="px-4 py-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 text-sm font-semibold transition"
+                          >
+                            Re-attempt Interview
+                          </Link>
+                        </div>
+
+                        {/* Answers Breakdown */}
+                        {details?.answers && details.answers.length > 0 && (
+                          <div className="space-y-6">
+                            <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500">Answer Breakdown</h4>
+                            {details.answers.map((answer, idx) => (
+                              <div key={idx} className="bg-white/[0.02] border border-white/10 rounded-xl p-5 space-y-4">
+                                <h5 className="text-sm font-bold text-white">Answer {idx + 1}</h5>
+
+                                {/* Transcript */}
+                                {answer.transcript && (
+                                  <div className="bg-black/50 border border-gray-800 rounded-xl p-4 text-gray-300 text-sm leading-relaxed italic border-l-4 border-l-blue-500">
+                                    &ldquo;{answer.transcript}&rdquo;
+                                  </div>
+                                )}
+
+                                {/* Score Bars */}
+                                {answer.scores && (
+                                  <div className="space-y-2">
+                                    {SCORE_DIMENSIONS.map(dim => {
+                                      const val = (answer.scores as any)[dim] ?? 0;
+                                      const pct = (val / 20) * 100;
+                                      const colors = getScoreColor(val, 20);
+                                      return (
+                                        <div key={dim} className="flex items-center gap-3">
+                                          <span className="text-[11px] text-gray-400 uppercase tracking-wider w-36 shrink-0">{dim.replace(/_/g, ' ')}</span>
+                                          <div className="flex-1 h-2.5 bg-white/5 rounded-full overflow-hidden">
+                                            <div className={`h-full rounded-full ${colors.bar} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                                          </div>
+                                          <span className={`text-xs font-bold w-12 text-right ${colors.text}`}>{val}/20</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {/* AI Feedback */}
+                                {answer.scores?.feedback && (
+                                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 flex items-start gap-3">
+                                    <span className="text-lg shrink-0">💡</span>
+                                    <div>
+                                      <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-1">AI Feedback</div>
+                                      <p className="text-sm text-blue-200/90 leading-relaxed">{answer.scores.feedback}</p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Metrics (top-level aggregated scores if present) */}
+                        {details?.metrics && (
+                          <div>
+                            <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">Aggregated Metrics</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                              {Object.entries(details.metrics).filter(([k]) => !['overall_score', 'fairness_adjustment'].includes(k)).map(([k, v]) => (
+                                <div key={k} className="bg-white/5 border border-white/10 rounded-lg p-3 text-center">
+                                  <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{k.replace(/_/g, ' ')}</div>
+                                  <div className="text-lg font-bold text-white">{v as number}{k.includes('score') ? '' : '/20'}</div>
+                                </div>
+                              ))}
+                              {details.metrics.fairness_adjustment ? (
+                                <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-3 text-center">
+                                  <div className="text-[10px] text-rose-400 uppercase tracking-widest mb-1">Fairness Bias Shift</div>
+                                  <div className="text-lg font-bold text-rose-400">+{details.metrics.fairness_adjustment}</div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Violations */}
+                        {details?.violations && details.violations.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-bold uppercase tracking-widest text-red-500/80 mb-3">Proctoring Flags</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {details.violations.map((violation: any, idx: number) => (
+                                <div key={idx} className="p-3 rounded-lg border flex items-start gap-3 bg-red-500/10 border-red-500/30 text-red-400">
+                                  <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
+                                  <div>
+                                    <div className="text-xs font-bold uppercase">{violation.type?.replace(/_/g, ' ') || 'Violation'}</div>
+                                    <div className="text-sm opacity-90">{violation.message || JSON.stringify(violation)}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </section>
 
@@ -396,11 +396,10 @@ export default function PracticeDashboard() {
                 >
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-bold text-white group-hover:text-amber-300 transition">{session.job_title}</h3>
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                      session.status === 'evaluating' 
-                        ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30' 
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${session.status === 'evaluating'
+                        ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
                         : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                    }`}>
+                      }`}>
                       {session.status}
                     </span>
                   </div>

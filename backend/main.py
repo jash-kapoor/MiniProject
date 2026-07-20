@@ -43,9 +43,12 @@ from monitoring import analyze_frame
 from routers import interviews, stream, users, questions
 from cleanup import cleanup_old_recordings
 from pdf_generator import generate_interview_pdf
-from rate_limit import limiter
+from rate_limit import limiter, rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from upload_security import secure_filename, validate_audio_upload
 from config import settings
+from logger import logger
 from pathlib import Path
 from scoring import (
     analyze_sentiment,
@@ -60,8 +63,11 @@ from whisper_model import transcribe_audio
 models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI(title="VoxAssess API", description="AI Interview Evaluation System API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
-# Configure CORS — must be added before routers
+# Configure CORS - must be added before routers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -148,7 +154,7 @@ def health_check():
 
 
 # ─────────────────────────────────────────────────────────
-#  Live Sessions — SQLite-backed
+#  Live Sessions - SQLite-backed
 # ─────────────────────────────────────────────────────────
 @app.post("/live-sessions")
 def create_live_session(
@@ -297,7 +303,7 @@ def get_meeting_alerts(
 
 
 # ─────────────────────────────────────────────────────────
-#  1. POST /transcribe — Whisper transcription
+#  1. POST /transcribe - Whisper transcription
 # ─────────────────────────────────────────────────────────
 @app.post("/transcribe")
 @limiter.limit("10/minute")
@@ -342,7 +348,7 @@ async def transcribe(
 
 
 # ─────────────────────────────────────────────────────────
-#  2. POST /analyze-answer — Speech features + scoring
+#  2. POST /analyze-answer - Speech features + scoring
 # ─────────────────────────────────────────────────────────
 @app.post("/analyze-answer")
 @limiter.limit("10/minute")
@@ -604,7 +610,7 @@ async def log_violation(
 
 
 # ─────────────────────────────────────────────────────────
-#  4. GET /interview-report — Aggregated report
+#  4. GET /interview-report - Aggregated report
 # ─────────────────────────────────────────────────────────
 @app.get("/interview-report")
 def get_interview_report(

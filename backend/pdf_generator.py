@@ -45,7 +45,7 @@ def generate_interview_pdf(interview_id: int, db: Session) -> bytes:
         'CustomTitle', parent=styles['Title'],
         fontSize=22, spaceAfter=6, textColor=colors.HexColor('#1e3a5f')
     )
-    story.append(Paragraph("VoxAssess AI — Interview Report", title_style))
+    story.append(Paragraph("VoxAssess AI - Interview Report", title_style))
     story.append(Spacer(1, 4*mm))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#3b82f6')))
     story.append(Spacer(1, 6*mm))

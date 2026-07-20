@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VoxAssess — AI Interview Evaluation",
+  title: "VoxAssess - AI Interview Evaluation",
   description: "Intelligent interview evaluation powered by AI",
 };
 

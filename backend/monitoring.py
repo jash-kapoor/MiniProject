@@ -136,6 +136,21 @@ def detect_eye_contact(frame: np.ndarray) -> dict:
             
             face_2d.append([x, y])
             face_3d.append([x, y, lm.z])
+
+    face_2d = np.array(face_2d, dtype=np.float64)
+    face_3d = np.array(face_3d, dtype=np.float64)
+
+    focal_length = img_w
+    cam_matrix = np.array(
+        [[focal_length, 0, img_w / 2],
+         [0, focal_length, img_h / 2],
+         [0, 0, 1]], dtype=np.float64
+    )
+    dist_coeffs = np.zeros((4, 1), dtype=np.float64)
+
+    success, rot_vec, trans_vec = cv2.solvePnP(
+        face_3d, face_2d, cam_matrix, dist_coeffs
+    )
     rmat, jac = cv2.Rodrigues(rot_vec)
     angles, mtxR, mtxQ, Qx, Qy, Qz = cv2.RQDecomp3x3(rmat)
 

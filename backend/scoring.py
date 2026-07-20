@@ -6,6 +6,7 @@ from google import genai
 import os
 import json
 from dotenv import load_dotenv
+from logger import logger
 
 load_dotenv()
 
@@ -297,36 +298,36 @@ def calculate_rolling_confidence(features: dict) -> float:
     return float(round(float(fluency_score + rate_score), 1))
 
 def score_with_gemini(question: str, transcript: str) -> dict:
-    prompt = f"""You are a strict professional interview evaluator. Evaluate ONLY what is literally written — do not give benefit of the doubt or infer intent. Most answers should score 11-15 out of 20. Scores of 18-20 are rare and only for truly exceptional answers.
+    prompt = f"""You are a strict professional interview evaluator. Evaluate ONLY what is literally written - do not give benefit of the doubt or infer intent. Most answers should score 11-15 out of 20. Scores of 18-20 are rare and only for truly exceptional answers.
 
 Question: {question}
 Candidate's Answer: {transcript}
 
 Score each dimension using ONLY these specific rules:
 
-FLUENCY (0-20) — measure actual smoothness of expression:
+FLUENCY (0-20) - measure actual smoothness of expression:
 - Deduct 3 points for each grammatically broken or incomplete sentence
 - Deduct 2 points for each filler phrase ("I think", "and then", "like", "basically")
 - Deduct 2 points for repeated words or ideas within same answer
 - Start at 20 and subtract. Minimum 0.
 
-VOCABULARY (0-20) — measure word quality:
+VOCABULARY (0-20) - measure word quality:
 - Count professional/precise words used (implemented, coordinated, optimized, etc.)
 - Penalize vague words: "things", "stuff", "good", "nice", "very", "a lot"
 - Penalize grammatically incorrect word usage ("companies like values who can")
 - Average answer with mixed vocabulary = 12-14. Only rich precise vocabulary = 17+.
 
-CONTENT_RELEVANCE (0-20) — does it directly answer the question:
+CONTENT_RELEVANCE (0-20) - does it directly answer the question:
 - Does the answer address exactly what was asked? 
 - Generic answers that could apply to any question = 10-13
 - Specific, question-targeted answer with examples = 15-18
 
-CONFIDENCE (0-20) — assertiveness and certainty:
+CONFIDENCE (0-20) - assertiveness and certainty:
 - Hedging phrases ("I think", "maybe", "I feel like") each deduct 2 points
 - Clear assertive statements add points
 - Start at 16, add/subtract based on above
 
-STRUCTURE (0-20) — organization:
+STRUCTURE (0-20) - organization:
 - No clear structure (just stream of consciousness) = 8-10
 - Some structure but rambling = 11-14  
 - Clear intro → body → conclusion = 15-18
