@@ -1,7 +1,5 @@
 import cv2
 import numpy as np
-from ultralytics import YOLO
-import mediapipe as mp
 import time
 import threading
 from dataclasses import dataclass, field
@@ -9,13 +7,27 @@ from typing import Optional, Any, Dict
 
 from logger import logger
 
-# --- OpenCV Haar Cascade for face detection ---
-face_cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-)
-
-# --- MediaPipe Face Mesh for 3D Orientation ---
 try:
+    face_cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    face_cascade = cv2.CascadeClassifier(face_cascade_path)
+    if face_cascade.empty():
+        face_cascade = None
+except Exception as e:
+    logger.warning("Haar cascade face detection unavailable: %s", e)
+    face_cascade = None
+
+
+try:
+    from ultralytics import YOLO
+    model = YOLO("yolov8n.pt")
+    YOLO_CLASSES = model.names
+except Exception as e:
+    logger.warning("YOLO object detection unavailable: %s", e)
+    model = None
+    YOLO_CLASSES = {}
+
+try:
+    import mediapipe as mp
     mp_face_mesh = mp.solutions.face_mesh
     face_mesh = mp_face_mesh.FaceMesh(
         static_image_mode=False,
@@ -24,14 +36,11 @@ try:
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5
     )
-except AttributeError:
-    logger.warning("mediapipe.solutions not found. Eye contact tracking will be disabled.")
-    mp_face_mesh = None
-    face_mesh = None
 except Exception as e:
-    logger.exception("Failed to initialize MediaPipe Face Mesh: %s", e)
+    logger.warning("MediaPipe Eye Contact Tracking unavailable: %s", e)
     mp_face_mesh = None
     face_mesh = None
+
 
 
 @dataclass
@@ -59,9 +68,7 @@ def cleanup_session_state(interview_id: int | str) -> None:
     with _session_states_lock:
         _session_states.pop(str(interview_id), None)
 
-# --- YOLOv8 for object detection ---
-model = YOLO("yolov8n.pt")  # Optimized for speed
-YOLO_CLASSES = model.names
+
 
 
 def detect_face(frame: np.ndarray) -> dict:
@@ -74,10 +81,12 @@ def detect_face(frame: np.ndarray) -> dict:
     Returns:
         Dictionary with face_detected, face_count, and bounding boxes.
     """
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=3, minSize=(40, 40)
-    )
+    if face_cascade is None or face_cascade.empty():
+        faces = []
+    else:
+        faces = face_cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=3, minSize=(40, 40)
+        )
 
     face_count = len(faces)
     face_boxes = [{"x": int(x), "y": int(y), "w": int(w), "h": int(h)} for (x, y, w, h) in faces]

@@ -70,12 +70,7 @@ app.add_middleware(SlowAPIMiddleware)
 # Configure CORS - must be added before routers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-    ],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -309,6 +304,7 @@ def get_meeting_alerts(
 @limiter.limit("10/minute")
 async def transcribe(
     request: Request,
+    response: Response,
     file: UploadFile = File(...),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -354,6 +350,7 @@ async def transcribe(
 @limiter.limit("10/minute")
 async def analyze_answer(
     request: Request,
+    response: Response,
     file: UploadFile = File(...),
     question: str = Form(""),
     interview_id: Optional[int] = Form(None),

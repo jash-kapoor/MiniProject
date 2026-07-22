@@ -2,14 +2,15 @@ import os
 import shutil
 import subprocess
 import tempfile
-from faster_whisper import WhisperModel
+try:
+    from faster_whisper import WhisperModel
+    if shutil.which("ffmpeg") is None:
+        model = None
+    else:
+        model = WhisperModel("base", device="cpu", compute_type="int8")
+except (ImportError, RuntimeError, Exception) as e:
+    model = None
 
-if shutil.which("ffmpeg") is None:
-    raise RuntimeError("ffmpeg is required")
-
-# Load Faster-Whisper base model (runs on CPU by default)
-# Use "small", "medium", or "large-v3" for better accuracy
-model = WhisperModel("base", device="cpu", compute_type="int8")
 
 
 def transcribe_audio(audio_path: str) -> str:
@@ -22,6 +23,8 @@ def transcribe_audio(audio_path: str) -> str:
     Returns:
         Full transcript text as a single string.
     """
+    if model is None:
+        return "Audio transcription unavailable (Whisper model or ffmpeg not loaded)."
     transcribe_path = audio_path
     temp_wav_path = None
 

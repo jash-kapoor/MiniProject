@@ -58,6 +58,8 @@ export default function InterviewPage() {
   // Proctoring State
   const [flagCount, setFlagCount] = useState(0);
   const flagCountRef = useRef(0);
+  const tabSwitchCountRef = useRef(0);
+  const hasStartedRecordingRef = useRef(false);
   const [faceWarningVisible, setFaceWarningVisible] = useState(false);
   const [faceDetectionPct, setFaceDetectionPct] = useState(100);
   const consecutiveFaceMissCount = useRef(0);
@@ -85,7 +87,7 @@ export default function InterviewPage() {
   }, []);
 
   const raiseFlag = useCallback((reason: string) => {
-    if (!isRecordingRef.current) return;
+    if (!hasStartedRecordingRef.current) return;
     flagCountRef.current += 1;
     const currentFlags = flagCountRef.current;
     setFlagCount(currentFlags);
@@ -224,6 +226,7 @@ export default function InterviewPage() {
     mediaRecorderRef.current = recorder;
     setIsRecording(true);
     isRecordingRef.current = true;
+    hasStartedRecordingRef.current = true;
     setRecordingTime(0);
 
     timerRef.current = setInterval(() => {
@@ -381,13 +384,49 @@ const startMonitoring = () => {
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.hidden && isRecordingRef.current) {
-        raiseFlag("Candidate switched tabs");
+      // Start tab switch detection only after interviewee clicks start recording
+      if (document.hidden && hasStartedRecordingRef.current) {
+        tabSwitchCountRef.current += 1;
+        const currentCount = tabSwitchCountRef.current;
+
+        // Log violation to backend
+        if (interviewId) {
+          const token = localStorage.getItem("voxassess_token");
+          fetch(`${BACKEND_URL}/log-violation/${interviewId}`, {
+            method: "POST",
+            credentials: "include",
+            headers: { 
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              violation_type: "tab_switch",
+              message: `Candidate switched tabs (${currentCount}/3)`
+            })
+          }).catch(() => {});
+        }
+
+        // Increment overall flag count
+        flagCountRef.current += 1;
+        setFlagCount(flagCountRef.current);
+
+        if (currentCount >= 3) {
+          toast.error("🚨 Interview Terminated: You switched tabs 3 times.", { 
+            id: 'tab-switch-terminate', 
+            duration: 5000 
+          });
+          setTimeout(terminateInterview, 2000);
+        } else {
+          toast.error(`⚠️ Warning: Tab switch detected (${currentCount}/3). Switching 3 times will terminate your interview.`, {
+            id: 'tab-switch-warning',
+            duration: 5000
+          });
+        }
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [raiseFlag]);
+  }, [interviewId, terminateInterview]);
 
   // ─── Transcription & Analysis ───────────────
   const handleRecordingComplete = async () => {

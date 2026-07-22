@@ -62,18 +62,21 @@ def extract_speech_features(audio_path: str, transcript: str) -> dict:
         Dictionary containing speech features.
     """
     # --- Audio-based features ---
-    y, sr = librosa.load(audio_path, sr=None)
-    duration = librosa.get_duration(y=y, sr=sr)
+    try:
+        y, sr = librosa.load(audio_path, sr=None)
+        duration = float(librosa.get_duration(y=y, sr=sr))
+        intervals = librosa.effects.split(y, top_db=30)
+        total_speech_time = sum((end - start) for start, end in intervals) / sr if sr and sr > 0 else 0
+        pause_duration = max(0.0, float(duration - total_speech_time))
+    except Exception as e:
+        logger.warning(f"Audio feature extraction fallback for {audio_path}: {e}")
+        duration = 0.0
+        pause_duration = 0.0
 
     # Word count and speech rate (words per minute)
     words = transcript.split()
     word_count = len(words)
     speech_rate = (word_count / duration) * 60 if duration > 0 else 0
-
-    # Pause detection using silence intervals
-    intervals = librosa.effects.split(y, top_db=30)
-    total_speech_time = sum((end - start) for start, end in intervals) / sr
-    pause_duration = max(0, duration - total_speech_time)
 
     # --- Transcript-based features ---
     transcript_lower = transcript.lower()
