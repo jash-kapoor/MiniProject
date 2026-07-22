@@ -17,8 +17,18 @@ if not api_key:
 else:
     client = genai.Client(api_key=api_key)
 
-# Load spaCy model
-nlp = spacy.load("en_core_web_sm")
+_nlp = None
+
+def get_spacy_nlp():
+    global _nlp
+    if _nlp is not None:
+        return _nlp
+    try:
+        _nlp = spacy.load("en_core_web_sm")
+        return _nlp
+    except Exception as e:
+        logger.warning("spaCy model load failed: %s", e)
+        return None
 
 # Common filler words to detect
 FILLER_WORDS = {
@@ -87,8 +97,12 @@ def extract_speech_features(audio_path: str, transcript: str) -> dict:
         filler_count += len(re.findall(r'\b' + re.escape(filler) + r'\b', transcript_lower))
 
     # Answer length (sentence count via spaCy)
-    doc = nlp(transcript)
-    sentence_count = len(list(doc.sents))
+    nlp = get_spacy_nlp()
+    if nlp is not None:
+        doc = nlp(transcript)
+        sentence_count = len(list(doc.sents))
+    else:
+        sentence_count = len([s for s in transcript.split('.') if s.strip()])
 
     return {
         "speech_rate": float(round(float(speech_rate), 2)),

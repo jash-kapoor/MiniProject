@@ -17,29 +17,40 @@ except Exception as e:
     face_cascade = None
 
 
-try:
-    from ultralytics import YOLO
-    model = YOLO("yolov8n.pt")
-    YOLO_CLASSES = model.names
-except Exception as e:
-    logger.warning("YOLO object detection unavailable: %s", e)
-    model = None
-    YOLO_CLASSES = {}
+_yolo_model = None
+_face_mesh = None
 
-try:
-    import mediapipe as mp
-    mp_face_mesh = mp.solutions.face_mesh
-    face_mesh = mp_face_mesh.FaceMesh(
-        static_image_mode=False,
-        max_num_faces=1,
-        refine_landmarks=True,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
-    )
-except Exception as e:
-    logger.warning("MediaPipe Eye Contact Tracking unavailable: %s", e)
-    mp_face_mesh = None
-    face_mesh = None
+def get_yolo_model():
+    global _yolo_model
+    if _yolo_model is not None:
+        return _yolo_model
+    try:
+        from ultralytics import YOLO
+        _yolo_model = YOLO("yolov8n.pt")
+        return _yolo_model
+    except Exception as e:
+        logger.warning("YOLO object detection unavailable: %s", e)
+        return None
+
+def get_face_mesh():
+    global _face_mesh
+    if _face_mesh is not None:
+        return _face_mesh
+    try:
+        import mediapipe as mp
+        mp_face_mesh = mp.solutions.face_mesh
+        _face_mesh = mp_face_mesh.FaceMesh(
+            static_image_mode=False,
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
+        return _face_mesh
+    except Exception as e:
+        logger.warning("MediaPipe Eye Contact Tracking unavailable: %s", e)
+        return None
+
 
 
 
@@ -110,6 +121,7 @@ def detect_eye_contact(frame: np.ndarray) -> dict:
     Estimates whether the candidate is looking at the camera using MediaPipe Face Mesh
     to calculate 3D head pose orientation (Pitch, Yaw, Roll).
     """
+    face_mesh = get_face_mesh()
     if face_mesh is None:
         return {
             "eye_contact": True, # Assume contact if we can't track
@@ -196,6 +208,16 @@ def detect_objects(frame: np.ndarray, face_boxes: list = []) -> dict:
     Simplified detection for debugging.
     """
     logger.debug("Frame received for object detection with shape=%s", frame.shape)
+
+    model = get_yolo_model()
+    if model is None:
+        return {
+            "alerts": [],
+            "is_suspicious": False,
+            "person_count": 1,
+            "objects": [],
+            "raw_phone_detected": False
+        }
 
     # 1 & 2. Ensure YOLO model runs on the frame
     results = model(frame)

@@ -2,27 +2,32 @@ import os
 import shutil
 import subprocess
 import tempfile
-try:
-    from faster_whisper import WhisperModel
-    if shutil.which("ffmpeg") is None:
-        model = None
-    else:
-        model = WhisperModel("base", device="cpu", compute_type="int8")
-except (ImportError, RuntimeError, Exception) as e:
-    model = None
+from logger import logger
 
+_model = None
+
+def get_whisper_model():
+    global _model
+    if _model is not None:
+        return _model
+    try:
+        from faster_whisper import WhisperModel
+        if shutil.which("ffmpeg") is None:
+            logger.warning("ffmpeg is not available. Transcription disabled.")
+            return None
+        # Use tiny model for low memory footprint on free hosting (512MB RAM)
+        _model = WhisperModel("tiny", device="cpu", compute_type="int8")
+        return _model
+    except Exception as e:
+        logger.warning("Whisper model initialization failed: %s", e)
+        return None
 
 
 def transcribe_audio(audio_path: str) -> str:
     """
     Transcribes an audio file to text using Faster-Whisper.
-
-    Args:
-        audio_path: Path to the audio file (wav, mp3, etc.)
-
-    Returns:
-        Full transcript text as a single string.
     """
+    model = get_whisper_model()
     if model is None:
         return "Audio transcription unavailable (Whisper model or ffmpeg not loaded)."
     transcribe_path = audio_path
@@ -46,7 +51,7 @@ def transcribe_audio(audio_path: str) -> str:
         transcribe_path = temp_wav_path
 
     try:
-        segments, info = model.transcribe(transcribe_path, beam_size=5)
+        segments, info = model.transcribe(transcribe_path, beam_size=1)
 
         transcript_parts = []
         for segment in segments:
@@ -57,3 +62,4 @@ def transcribe_audio(audio_path: str) -> str:
     finally:
         if temp_wav_path and os.path.exists(temp_wav_path):
             os.remove(temp_wav_path)
+
